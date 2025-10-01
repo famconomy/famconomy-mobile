@@ -1,0 +1,23 @@
+.nav-button-container .nav-button:nth-child(1) {
+  background-color: #4f7288;
+}
+
+.nav-button-container .nav-button:nth-child(2) {
+  background-color: #3a5364;
+}
+
+.nav-button-container .nav-button:nth-child(3) {
+  background-color: #23bdb5;
+}
+
+.nav-button-container .nav-button:nth-child(4) {
+  background-color: #1a8f89;
+}
+
+.nav-button-container .nav-button:nth-child(5) {
+  background-color: #f67109;
+}
+
+.nav-button-container .nav-button:nth-child(6) {
+  background-color: #e65604;
+}

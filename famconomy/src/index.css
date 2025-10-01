@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.tour-highlight {
+  position: relative;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.75),
+    0 16px 32px rgba(15, 23, 42, 0.35);
+  transition: box-shadow 180ms ease-in-out, transform 180ms ease-in-out;
+  transform: translateZ(0);
+}
+
+.tour-highlight::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  animation: tourHighlightPulse 1.9s ease-in-out infinite;
+}
+
+@keyframes tourHighlightPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    opacity: 0.9;
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(99, 102, 241, 0);
+    opacity: 0;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    opacity: 0;
+  }
+}
