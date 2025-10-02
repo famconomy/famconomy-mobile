@@ -1,1 +1,3 @@
 *.Identifier
+*:[Zz]one.Identifier
+*.p8
