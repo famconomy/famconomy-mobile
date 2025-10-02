@@ -136,6 +136,7 @@ model Family {
   FamilyCrestUrl        String?               @db.VarChar(100)
   FamilyMantra          String?               @db.VarChar(1000)
   FamilyValues          String?               @db.Text
+  rewardMode            RewardMode            @default(points)
   CreatedByUserID       String                @db.VarChar(36)
   CreatedDate           DateTime              @default(dbgenerated("(curdate())")) @db.DateTime(0)
   UpdatedDate           DateTime              @default(dbgenerated("(curdate())")) @db.DateTime(0)
@@ -1247,7 +1248,80 @@ enum RewardMode {
   auto
 }
 
+// Screen-time integration enums
+enum Provider {
+  APPLE
+  GOOGLE
+  MICROSOFT
+  META
+}
+
+enum GrantType {
+  GRANT
+  REVOKE
+  SET_LIMIT
+}
+
+enum GrantStatus {
+  PENDING
+  APPLIED
+  FAILED
+  EXPIRED
+}
+
 enum ClaimStatus {
   claimed
   completed
+}
+
+// Screen-time integration models
+model ScreenTimeAccount {
+  id              String    @id @default(cuid())
+  userId          String
+  provider        Provider
+  providerUserId  String
+  refreshTokenEnc String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  children        ScreenTimeChild[]
+  devices         ScreenTimeDevice[]
+  @@index([userId, provider])
+}
+
+model ScreenTimeChild {
+  id              String   @id @default(cuid())
+  familyChildId   String
+  accountId       String
+  providerChildId String
+  devices         ScreenTimeDevice[]
+  grants          ScreenTimeGrant[]
+  createdAt       DateTime @default(now())
+  @@index([familyChildId])
+  @@index([accountId])
+}
+
+model ScreenTimeDevice {
+  id               String   @id @default(cuid())
+  childId          String
+  platform         Provider
+  providerDeviceId String
+  lastSeenAt       DateTime?
+  statusBlob       Json?
+  createdAt        DateTime @default(now())
+  @@index([childId, platform])
+}
+
+model ScreenTimeGrant {
+  id              String     @id @default(cuid())
+  childId         String
+  type            GrantType
+  minutesDelta    Int
+  status          GrantStatus @default(PENDING)
+  issuedByUserId  String?
+  providerPayload Json?
+  errorMessage    String?
+  createdAt       DateTime    @default(now())
+  appliedAt       DateTime?
+  idempotencyKey  String?     @unique
+  @@index([childId, status])
 }

@@ -14,11 +14,13 @@ interface FamilySettingsModalProps {
 export const FamilySettingsModal: React.FC<FamilySettingsModalProps> = ({ isOpen, onClose, onSave, onLeaveFamily, onCreateNewFamily, family }) => {
   const [familyName, setFamilyName] = useState('');
   const [familyMantra, setFamilyMantra] = useState('');
+  const [rewardMode, setRewardMode] = useState<'points' | 'screenTime' | 'currency' | 'hybrid'>('points');
 
   useEffect(() => {
     if (family) {
       setFamilyName(family.FamilyName);
       setFamilyMantra(family.FamilyMantra || '');
+      setRewardMode(family.rewardMode || 'points');
     }
   }, [family]);
 
@@ -59,6 +61,22 @@ export const FamilySettingsModal: React.FC<FamilySettingsModalProps> = ({ isOpen
 
           <div>
             <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+              Reward System
+            </label>
+            <select
+              value={rewardMode}
+              onChange={e => setRewardMode(e.target.value as any)}
+              className="w-full px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400"
+            >
+              <option value="points">Points</option>
+              <option value="screenTime">Screen Time</option>
+              <option value="currency">Currency</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
               Family Mantra
             </label>
             <textarea
@@ -93,7 +111,7 @@ export const FamilySettingsModal: React.FC<FamilySettingsModalProps> = ({ isOpen
               Cancel
             </button>
             <button
-              onClick={() => onSave(familyName, familyMantra)}
+              onClick={() => onSave(familyName, familyMantra, undefined, rewardMode)}
               className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 dark:hover:bg-primary-400 rounded-xl"
             >
               Save Changes

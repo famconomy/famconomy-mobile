@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
-import { generateIngredientsForMeal, suggestMeals } from '../services/linzService';
+import { generateIngredientsForMeal, suggestMeals, suggestMealNames } from '../services/linzService';
 
 const ensureMealsFromSavedSuggestions = async (familyId: number) => {
   const memory = await prisma.linZMemory.findFirst({
@@ -87,6 +87,46 @@ const ensureMealsFromSavedSuggestions = async (familyId: number) => {
 // ... (existing functions)
 
 export const getMealSuggestions = async (req: Request, res: Response) => {
+  const { familyId, mealSlots, daysToSuggest, forceRefresh } = req.query;
+
+  if (!familyId) {
+    return res.status(400).json({ error: 'familyId is required.' });
+  }
+
+  const parsedFamilyId = Number(familyId);
+  if (!Number.isFinite(parsedFamilyId)) {
+    return res.status(400).json({ error: 'familyId must be a valid number.' });
+  }
+
+  // Parse optional parameters
+  let parsedMealSlots: ('BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK')[] | undefined;
+  if (mealSlots) {
+    const slotsStr = Array.isArray(mealSlots) ? mealSlots.join(',') : mealSlots as string;
+    parsedMealSlots = slotsStr.split(',').map(slot => slot.trim().toUpperCase()) as ('BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK')[];
+  }
+
+  const parsedDaysToSuggest = daysToSuggest ? Number(daysToSuggest) : undefined;
+  const parsedForceRefresh = forceRefresh === 'true';
+
+  try {
+    if (!parsedForceRefresh) {
+      await ensureMealsFromSavedSuggestions(parsedFamilyId);
+    }
+    
+    const suggestions = await suggestMeals(parsedFamilyId, {
+      mealSlots: parsedMealSlots,
+      daysToSuggest: parsedDaysToSuggest,
+      forceRefresh: parsedForceRefresh
+    });
+    
+    res.json(suggestions);
+  } catch (error) {
+    console.error('Error getting meal suggestions:', error);
+    res.status(500).json({ error: 'Failed to get meal suggestions.' });
+  }
+};
+
+export const getMealNameSuggestions = async (req: Request, res: Response) => {
   const { familyId } = req.query;
 
   if (!familyId) {
@@ -99,12 +139,11 @@ export const getMealSuggestions = async (req: Request, res: Response) => {
   }
 
   try {
-    await ensureMealsFromSavedSuggestions(parsedFamilyId);
-    const suggestions = await suggestMeals(parsedFamilyId);
-    res.json(suggestions);
+    const mealNames = await suggestMealNames(parsedFamilyId);
+    res.json(mealNames);
   } catch (error) {
-    console.error('Error getting meal suggestions:', error);
-    res.status(500).json({ error: 'Failed to get meal suggestions.' });
+    console.error('Error getting meal name suggestions:', error);
+    res.status(500).json({ error: 'Failed to get meal name suggestions.' });
   }
 };
 

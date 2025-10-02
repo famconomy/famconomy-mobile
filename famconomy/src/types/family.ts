@@ -67,6 +67,7 @@ export interface Family {
   CreatedByUserID: string;
   CreatedDate: string;
   UpdatedDate: string;
+  rewardMode?: 'points' | 'screenTime' | 'currency' | 'hybrid';
 }
 
 export interface FamilyDetails extends Family {

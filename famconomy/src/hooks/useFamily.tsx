@@ -125,5 +125,6 @@ export const useFamily = () => {
     isLoading,
     error,
     refetchFamily: fetchFamily,
+    rewardMode: family?.rewardMode ?? 'points',
   };
 };

@@ -10,7 +10,7 @@ import { useLinZChat } from '../hooks/useLinZChat';
 import { getShoppingLists, createShoppingList, archiveShoppingList, deleteShoppingList, addMealPlanToShoppingList } from '../api/shoppingLists';
 import { getShoppingItems, createShoppingItem, updateShoppingItem } from '../api/shoppingItems';
 import { getMeals, getMealPlan, upsertMealPlanEntry } from '../api/meals';
-import { generateMealWithIngredients, getMealSuggestions } from '../api/linz';
+import { generateMealWithIngredients, getMealSuggestions, getMealNameSuggestions } from '../api/linz';
 import { MealSuggestion } from '../types';
 import { getIntegrationStatus } from '../api/integrations';
 import { InstacartExportView } from '../components/integrations/InstacartExportView';
@@ -47,13 +47,22 @@ export const ShoppingPage: React.FC = () => {
   const [isGeneratingList, setIsGeneratingList] = useState(false);
   const [suggestions, setSuggestions] = useState<MealSuggestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestedMealNames, setSuggestedMealNames] = useState<string[]>([]);
+  const [isLoadingSuggestedNames, setIsLoadingSuggestedNames] = useState(false);
+  const [selectedMealSlots, setSelectedMealSlots] = useState<('BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK')[]>(['DINNER']);
 
   const handleSeeAllSuggestions = () => {
     if (meals.length === 0) {
-      openChat();
-      appendLinZMessage("Let's talk about your family's favorite meals to get some suggestions started!");
+      if (suggestedMealNames.length > 0) {
+        // Show all suggested meal names
+        openChat();
+        appendLinZMessage(`Here are all the meal suggestions I have for you: ${suggestedMealNames.join(', ')}. Would you like me to create any of these meals with ingredients?`);
+      } else {
+        openChat();
+        appendLinZMessage("Let's talk about your family's favorite meals to get some suggestions started!");
+      }
     } else {
-      // For now, do nothing.
+      // For now, do nothing when there are existing meals.
     }
   };
 
@@ -225,22 +234,50 @@ export const ShoppingPage: React.FC = () => {
     }
   };
 
-  const handleGetSuggestions = async () => {
+  const handleGetSuggestions = async (forceRefresh = false) => {
     if (!family) return;
-
-    if (meals.length === 0) {
-      openChat();
-      appendLinZMessage("I don't have any meal history for you yet. Let's talk about your family's favorite meals to get some suggestions started!");
-      return;
-    }
 
     setIsSuggesting(true);
     try {
-      const newSuggestions = await getMealSuggestions(family.FamilyID);
-      setSuggestions(newSuggestions);
-      toast.success('LinZ has some ideas for your meal plan!');
+      const newSuggestions = await getMealSuggestions(family.FamilyID, {
+        mealSlots: selectedMealSlots,
+        daysToSuggest: 7,
+        forceRefresh
+      });
+      
+      if (newSuggestions.length === 0) {
+        // If no meal suggestions (likely because no meals exist), try to get meal name suggestions
+        setIsLoadingSuggestedNames(true);
+        try {
+          const mealNames = await getMealNameSuggestions(family.FamilyID);
+          if (mealNames.length > 0) {
+            setSuggestedMealNames(mealNames);
+            toast.info('LinZ has some meal ideas to get you started! Try creating some of these meals.');
+          } else {
+            openChat();
+            appendLinZMessage("I don't have enough information about your family's meal preferences yet. Let's talk about your favorite meals and dietary preferences so I can suggest some ideas!");
+            toast.info('LinZ needs to learn more about your preferences first.');
+          }
+        } catch (nameErr) {
+          console.error('Error getting meal name suggestions:', nameErr);
+          openChat();
+          appendLinZMessage("Let's chat about your family's favorite meals and dietary preferences so I can suggest some ideas!");
+          toast.info('LinZ is ready to learn about your meal preferences!');
+        } finally {
+          setIsLoadingSuggestedNames(false);
+        }
+      } else {
+        setSuggestions(newSuggestions);
+        const slotsText = selectedMealSlots.length === 1 ? selectedMealSlots[0].toLowerCase() : 'meal';
+        const refreshText = forceRefresh ? 'fresh ' : '';
+        toast.success(`LinZ has some ${refreshText}${slotsText} ideas for your meal plan!`);
+      }
     } catch (err) {
-      toast.error('LinZ had trouble coming up with suggestions.');
+      console.error('Error getting meal suggestions:', err);
+      // Fall back to opening chat if there's an error
+      openChat();
+      appendLinZMessage("I'm having trouble generating meal suggestions right now. Let's chat about your family's favorite meals and I'll help you plan some meals!");
+      toast.error('LinZ had trouble coming up with suggestions, but is ready to chat!');
     } finally {
       setIsSuggesting(false);
     }
@@ -326,12 +363,18 @@ export const ShoppingPage: React.FC = () => {
   );
 
   const weekDays = useMemo(() => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], []);
-  const mealSlots: Array<{ slot: MealSlot; label: string }> = [
+  
+  const allMealSlots: Array<{ slot: MealSlot; label: string }> = [
     { slot: 'BREAKFAST', label: 'Breakfast' },
     { slot: 'LUNCH', label: 'Lunch' },
     { slot: 'DINNER', label: 'Dinner' },
     { slot: 'SNACK', label: 'Snack' },
   ];
+  
+  const mealSlots = useMemo(() => 
+    allMealSlots.filter(mealSlot => selectedMealSlots.includes(mealSlot.slot)),
+    [selectedMealSlots]
+  );
 
   const weekEntries = useMemo(() => {
     const week = mealPlan.find(plan => plan.WeekStart.startsWith(selectedWeekStart));
@@ -388,7 +431,9 @@ export const ShoppingPage: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
             <div>
               <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">Weekly Meal Plan</h2>
-              <p className="text-neutral-500 dark:text-neutral-400 text-sm">Assign meals to each day and slot. LinZ will sync picked meals to your lists.</p>
+              <p className="text-neutral-500 dark:text-neutral-400 text-sm">
+                Assign meals to each day and time slot. Select meal types on the right to customize your plan view.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -487,21 +532,87 @@ export const ShoppingPage: React.FC = () => {
               <button onClick={handleSeeAllSuggestions} className="text-sm text-primary-600 dark:text-primary-400 hover:underline">See all</button>
             </div>
             <div className="space-y-3">
-              {meals.slice(0, 5).map(meal => (
-                <div key={meal.MealID} className="flex items-start gap-3 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-neutral-900 dark:text-white">{meal.Title}</h4>
-                      {meal.IsFavorite && <span className="text-xs text-primary-500">Favorite</span>}
-                    </div>
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2">{meal.Description || 'No description yet.'}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {meal.Tags?.map(tag => (
-                        <span key={tag.MealTagID} className="text-[11px] px-2 py-1 rounded-full bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300">{tag.Tag}</span>
-                      ))}
+              {meals.length > 0 ? (
+                meals.slice(0, 5).map(meal => (
+                  <div key={meal.MealID} className="flex items-start gap-3 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-neutral-900 dark:text-white">{meal.Title}</h4>
+                        {meal.IsFavorite && <span className="text-xs text-primary-500">Favorite</span>}
+                      </div>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2">{meal.Description || 'No description yet.'}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {meal.Tags?.map(tag => (
+                          <span key={tag.MealTagID} className="text-[11px] px-2 py-1 rounded-full bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300">{tag.Tag}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : suggestedMealNames.length > 0 ? (
+                <>
+                  <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">LinZ suggests these meals to get you started:</p>
+                  {suggestedMealNames.slice(0, 6).map((mealName, index) => (
+                    <div key={index} className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-primary-200 dark:border-primary-700 bg-primary-50/30 dark:bg-primary-900/20">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-neutral-900 dark:text-white">{mealName}</h4>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400">Click to create with LinZ</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!user || !family) return;
+                          setIsCreatingMeal(true);
+                          try {
+                            await generateMealWithIngredients(mealName, family.FamilyID, user.id);
+                            toast.success(`Successfully created "${mealName}" with ingredients!`);
+                            // Remove this meal from suggestions
+                            setSuggestedMealNames(prev => prev.filter(name => name !== mealName));
+                            fetchMealsData();
+                          } catch (err) {
+                            toast.error(`Failed to create "${mealName}"`);
+                          } finally {
+                            setIsCreatingMeal(false);
+                          }
+                        }}
+                        disabled={isCreatingMeal}
+                        className="text-xs px-3 py-1 rounded-full bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-3">No meals yet</p>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500">Chat with LinZ about your favorites or tap "Get Meal Suggestions" to start</p>
                 </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-card p-4">
+            <h3 className="text-lg font-semibold text-neutral-900 dark:text-white mb-3">Meal Types</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">Select which meal types to get suggestions for:</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'] as const).map((slot) => (
+                <button
+                  key={slot}
+                  onClick={() => {
+                    setSelectedMealSlots(prev => 
+                      prev.includes(slot) 
+                        ? prev.filter(s => s !== slot)
+                        : [...prev, slot]
+                    );
+                  }}
+                  className={`p-2 text-xs rounded-lg border transition-colors ${
+                    selectedMealSlots.includes(slot)
+                      ? 'bg-primary-100 border-primary-300 text-primary-800 dark:bg-primary-900/40 dark:border-primary-600 dark:text-primary-300'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-700/50 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {slot.charAt(0) + slot.slice(1).toLowerCase()}
+                </button>
               ))}
             </div>
           </div>
@@ -515,13 +626,24 @@ export const ShoppingPage: React.FC = () => {
             }}>
               <Wand2 size={14} /> Ask LinZ for a recipe
             </button>
-            <button 
-              onClick={handleGetSuggestions}
-              disabled={isSuggesting}
-              className="mt-3 inline-flex items-center gap-2 text-xs text-primary-700 hover:text-primary-800 dark:text-primary-200 disabled:opacity-50"
-            >
-              <Wand2 size={14} /> {isSuggesting ? 'Thinking...' : 'Get Meal Suggestions'}
-            </button>
+            <div className="flex gap-2 flex-wrap">
+              <button 
+                onClick={() => handleGetSuggestions(false)}
+                disabled={isSuggesting}
+                className="inline-flex items-center gap-2 text-xs text-primary-700 hover:text-primary-800 dark:text-primary-200 disabled:opacity-50"
+              >
+                <Wand2 size={14} /> {isSuggesting ? 'Thinking...' : 'Get Suggestions'}
+              </button>
+              {suggestions.length > 0 && (
+                <button 
+                  onClick={() => handleGetSuggestions(true)}
+                  disabled={isSuggesting}
+                  className="inline-flex items-center gap-2 text-xs text-secondary-700 hover:text-secondary-800 dark:text-secondary-200 disabled:opacity-50"
+                >
+                  ↻ Refresh
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

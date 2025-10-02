@@ -3,6 +3,7 @@ import { Family, User } from '../types/family';
 
 export interface FamilyDetails extends Family {
   members: User[];
+  rewardMode?: 'points' | 'screenTime' | 'currency' | 'hybrid';
 }
 
 export interface FamiliesResponse {
@@ -15,13 +16,13 @@ export const getMyFamily = async (): Promise<FamiliesResponse> => {
   return response.data;
 };
 
-export const createFamily = async (familyName: string): Promise<Family> => {
-  const response = await apiClient.post('/family', { familyName });
+export const createFamily = async (familyName: string, rewardMode?: string): Promise<Family> => {
+  const response = await apiClient.post('/family', { familyName, rewardMode });
   return response.data;
 };
 
-export const updateFamily = async (id: string, familyName: string, familyMantra: string, familyValues?: string[]): Promise<void> => {
-  await apiClient.put(`/family/${id}`, { familyName, familyMantra, familyValues });
+export const updateFamily = async (id: string, familyName: string, familyMantra: string, familyValues?: string[], rewardMode?: string): Promise<void> => {
+  await apiClient.put(`/family/${id}`, { familyName, familyMantra, familyValues, rewardMode });
 };
 
 export const updateFamilyMemberRole = async (familyId: string, memberId: string, relationshipId: number): Promise<void> => {

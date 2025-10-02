@@ -234,9 +234,12 @@ const AppContentRoutes: React.FC<AppContentRoutesProps> = ({ familyId, hasExisti
   );
 
   const shouldRedirectToOnboarding = useMemo(() => {
+    // Wait for both auth and family context to finish loading
     if (!isAuthenticated || authLoading) return false;
     if (!isAppShell) return false;
     if (!onboardingState.hydrated || onboardingState.loading) return false;
+    // Wait for family context to finish loading
+    if (typeof isFamilyContextReady !== 'undefined' && !isFamilyContextReady) return false;
     const onboardingComplete = onboardingState.currentStep === 'committed' || onboardingState.currentStep === 'completed';
     if (onboardingComplete) return false;
     if (hasExistingFamily) return false;

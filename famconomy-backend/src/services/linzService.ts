@@ -90,7 +90,124 @@ export interface MealSuggestion {
   mealSlot: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
 }
 
-export async function suggestMeals(familyId: number): Promise<MealSuggestion[]> {
+export async function suggestMealNames(familyId: number): Promise<string[]> {
+  try {
+    // Get LinZ facts about family preferences
+    const linzFacts = await prisma.linZFacts.findMany({
+      where: {
+        familyId: familyId,
+        key: {
+          in: ['favorite_meals', 'dietary_restrictions', 'cuisine_preferences', 'cooking_skill', 'meal_preferences', 'family_favorites']
+        }
+      }
+    });
+
+    // Get recent conversation context about food
+    const recentConversations = await prisma.linZConversation.findMany({
+      where: { familyId: familyId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: { messages: { orderBy: { createdAt: 'desc' }, take: 15 } }
+    });
+
+    const foodMessages = recentConversations.flatMap(conv => conv.messages)
+      .filter(msg => /meal|food|cook|dinner|lunch|breakfast|recipe|eat/i.test(msg.content))
+      .slice(0, 15);
+    
+    const conversationContext = foodMessages.map(msg => `- ${msg.content}`).join('\n');
+    const factsSummary = linzFacts.map(f => ` - ${f.key}: ${JSON.stringify(f.value)}`).join('\n');
+
+    const systemPrompt = `
+      You are a family meal planning assistant. Based on the family's conversation history and preferences, suggest 10-15 popular, family-friendly meal names that they might enjoy.
+      
+      Consider common family meals like "Spaghetti and Meatballs", "Chicken Tacos", "Beef Stir Fry", "Grilled Chicken", "Pizza Night", etc.
+      
+      You must respond with a valid JSON object containing a "meals" array of meal name strings.
+      
+      Example response:
+      {
+        "meals": ["Spaghetti and Meatballs", "Chicken Tacos", "Beef Stir Fry", "Grilled Salmon", "Homemade Pizza", "Chicken Alfredo", "Taco Tuesday", "BBQ Chicken", "Veggie Stir Fry", "Meatloaf"]
+      }
+    `;
+
+    if (!process.env.OPENAI_API_KEY) {
+      // Return some common family meals as fallback
+      return [
+        "Spaghetti and Meatballs",
+        "Chicken Tacos", 
+        "Beef Stir Fry",
+        "Grilled Chicken",
+        "Homemade Pizza",
+        "Chicken Alfredo",
+        "BBQ Chicken",
+        "Veggie Stir Fry",
+        "Fish and Chips",
+        "Chicken Parmesan"
+      ];
+    }
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: `## Family Preferences:\n${factsSummary || 'No specific preferences recorded yet'}\n\n## Recent Food Conversations:\n${conversationContext || 'No recent food conversations'}`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenAI returned an empty response.');
+    }
+
+    const parsedJson = JSON.parse(content);
+    
+    // Handle both direct array (legacy) and object with meals property (new format)
+    let mealNames: string[];
+    if (Array.isArray(parsedJson)) {
+      mealNames = parsedJson;
+    } else if (parsedJson.meals && Array.isArray(parsedJson.meals)) {
+      mealNames = parsedJson.meals;
+    } else {
+      // Try to find any array in the response object
+      const foundArray = Object.values(parsedJson).find(value => Array.isArray(value));
+      mealNames = foundArray ? foundArray as string[] : [];
+    }
+
+    return mealNames || [];
+
+  } catch (error) {
+    console.error('Error generating meal name suggestions:', error);
+    // Return fallback meal names
+    return [
+      "Spaghetti and Meatballs",
+      "Chicken Tacos", 
+      "Beef Stir Fry",
+      "Grilled Chicken",
+      "Homemade Pizza",
+      "Chicken Alfredo",
+      "BBQ Chicken",
+      "Veggie Stir Fry"
+    ];
+  }
+}
+
+export async function suggestMeals(
+  familyId: number, 
+  options?: { 
+    mealSlots?: ('BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK')[]; 
+    daysToSuggest?: number;
+    forceRefresh?: boolean;
+  }
+): Promise<MealSuggestion[]> {
+  // Set defaults
+  const mealSlots = options?.mealSlots || ['DINNER'];
+  const daysToSuggest = options?.daysToSuggest || 7;
+  const forceRefresh = options?.forceRefresh || false;
+
   // 1. Fetch meal history (e.g., last 8 weeks)
   const eightWeeksAgo = new Date();
   eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
@@ -106,7 +223,7 @@ export async function suggestMeals(familyId: number): Promise<MealSuggestion[]> 
     orderBy: { MealPlanWeek: { WeekStart: 'desc' } },
   });
 
-  // 2. Fetch all available meals for the family
+  // 2. Fetch all available meals for the family, optionally filtered by tags
   const allMeals = await prisma.meal.findMany({
     where: {
       FamilyID: familyId,
@@ -114,35 +231,93 @@ export async function suggestMeals(familyId: number): Promise<MealSuggestion[]> 
         Status: 'ARCHIVED',
       },
     },
+    include: {
+      Tags: true,
+    },
   });
 
-  // 3. Construct the prompt for OpenAI
-  const historySummary = history.map(h => ` - ${h.Meal.Title} on ${h.MealPlanWeek.WeekStart.toDateString()}`).join('\n');
-  const availableMealsSummary = allMeals.map(m => ` - ${m.Title} (ID: ${m.MealID})`).join('\n');
+  // 3. If no meals exist, fetch LinZ facts and conversation history to inform suggestions
+  let linzFacts: any[] = [];
+  let conversationContext = '';
+  
+  if (allMeals.length === 0) {
+    // Get LinZ facts about family preferences
+    linzFacts = await prisma.linZFacts.findMany({
+      where: {
+        familyId: familyId,
+        key: {
+          in: ['favorite_meals', 'dietary_restrictions', 'cuisine_preferences', 'cooking_skill', 'meal_preferences']
+        }
+      }
+    });
 
-  const systemPrompt = `
-    You are a family meal planning assistant. Your task is to create a diverse and appealing 7-day dinner plan.
-    You will be given a history of recently planned meals and a list of all available meals with their IDs.
+    // Get recent conversation context
+    const recentConversations = await prisma.linZConversation.findMany({
+      where: { familyId: familyId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: { messages: { orderBy: { createdAt: 'desc' }, take: 10 } }
+    });
+
+    const messages = recentConversations.flatMap(conv => conv.messages)
+      .filter(msg => msg.content.toLowerCase().includes('meal') || msg.content.toLowerCase().includes('food'))
+      .slice(0, 10);
+    
+    conversationContext = messages.map(msg => `- ${msg.content}`).join('\n');
+  }
+
+  // 4. Construct the prompt for OpenAI
+  const historySummary = history.map(h => ` - ${h.Meal.Title} on ${h.MealPlanWeek.WeekStart.toDateString()}`).join('\n');
+  const availableMealsSummary = allMeals.map(m => {
+    const tags = m.Tags ? m.Tags.map(tag => tag.Tag).join(', ') : 'no tags';
+    return ` - ${m.Title} (ID: ${m.MealID}) [Tags: ${tags}]`;
+  }).join('\n');
+  const factsSummary = linzFacts.map(f => ` - ${f.key}: ${JSON.stringify(f.value)}`).join('\n');
+
+  // 5. Create different prompts based on whether meals exist
+  const mealSlotsStr = mealSlots.join(', ');
+  const totalSuggestions = daysToSuggest * mealSlots.length;
+  
+  const systemPrompt = allMeals.length > 0 ? `
+    You are a family meal planning assistant. Your task is to create a diverse and appealing meal plan for ${daysToSuggest} days.
+    You will be given a history of recently planned meals and a list of all available meals with their IDs and tags.
     Avoid suggesting the same meals that have been eaten in the last 2-3 weeks if possible.
     The family enjoys variety.
 
-    You must respond with a valid JSON array of 7 meal suggestion objects for the 7 days of the week (Monday to Sunday).
-    Each object must have the following properties:
-    - "mealId": (number) The ID of the suggested meal from the available meals list.
-    - "dayOfWeek": (number) The day of the week, where Monday is 0 and Sunday is 6.
-    - "mealSlot": (string) This should always be "DINNER".
+    You need to suggest meals for these meal slots: ${mealSlotsStr}
+    
+    When suggesting meals, consider the meal's tags and appropriateness for the time of day:
+    - BREAKFAST: Look for meals tagged as "breakfast", "morning", "quick", "light", or traditionally breakfast foods
+    - LUNCH: Look for meals tagged as "lunch", "light", "quick", "sandwich", "salad", or moderate portion meals  
+    - DINNER: Look for meals tagged as "dinner", "main", "hearty", "family", or substantial evening meals
+    - SNACK: Look for meals tagged as "snack", "light", "quick", "healthy", or small portion items
 
-    Example response:
-    [
-      { "mealId": 101, "dayOfWeek": 0, "mealSlot": "DINNER" },
-      { "mealId": 105, "dayOfWeek": 1, "mealSlot": "DINNER" },
-      { "mealId": 112, "dayOfWeek": 2, "mealSlot": "DINNER" },
-      { "mealId": 103, "dayOfWeek": 3, "mealSlot": "DINNER" },
-      { "mealId": 108, "dayOfWeek": 4, "mealSlot": "DINNER" },
-      { "mealId": 115, "dayOfWeek": 5, "mealSlot": "DINNER" },
-      { "mealId": 102, "dayOfWeek": 6, "mealSlot": "DINNER" }
-    ]
-    Do not include any extra text or explanations in your response. Only the JSON array.
+    You must respond with a valid JSON object containing a "suggestions" array of ${totalSuggestions} meal suggestion objects.
+    Each object in the suggestions array must have the following properties:
+    - "mealId": (number) The ID of the suggested meal from the available meals list.
+    - "dayOfWeek": (number) The day of the week, where Monday is 0 and Sunday is ${daysToSuggest - 1}.
+    - "mealSlot": (string) One of: ${mealSlotsStr}.
+
+    Provide suggestions for each requested meal slot for each day. If a meal doesn't have specific tags, use your best judgment based on the meal name and description.
+
+    Example response for dinner suggestions:
+    {
+      "suggestions": [
+        { "mealId": 101, "dayOfWeek": 0, "mealSlot": "DINNER" },
+        { "mealId": 105, "dayOfWeek": 1, "mealSlot": "DINNER" },
+        { "mealId": 112, "dayOfWeek": 2, "mealSlot": "DINNER" }
+      ]
+    }
+    Do not include any extra text or explanations in your response. Only the JSON object.
+  ` : `
+    You are a family meal planning assistant. The family doesn't have any meals saved yet, but you can help them by suggesting popular, family-friendly meal names based on their preferences and conversation history.
+    
+    Since there are no existing meals with IDs, return an empty suggestions array. The frontend will handle this case by prompting the user to chat about their preferences first.
+    
+    You must respond with a JSON object containing an empty suggestions array:
+    {
+      "suggestions": []
+    }
   `;
 
   try {
@@ -150,12 +325,34 @@ export async function suggestMeals(familyId: number): Promise<MealSuggestion[]> 
     if (!process.env.OPENAI_API_KEY) {
       console.log('[Mock] Generating meal suggestions.');
       const suggestions: MealSuggestion[] = [];
-      for (let i = 0; i < 7; i++) {
-        if (allMeals[i]) {
-          suggestions.push({ mealId: allMeals[i].MealID, dayOfWeek: i, mealSlot: 'DINNER' });
+      
+      // If no meals exist, return empty array to trigger frontend conversation flow
+      if (allMeals.length === 0) {
+        console.log('[Mock] No meals available - returning empty suggestions to prompt conversation');
+        return suggestions;
+      }
+      
+      // Otherwise, create mock suggestions from existing meals for all requested slots
+      for (let day = 0; day < daysToSuggest; day++) {
+        for (const slot of mealSlots) {
+          // Try to pick different meals for different slots
+          const mealIndex = (day * mealSlots.length + mealSlots.indexOf(slot)) % allMeals.length;
+          if (allMeals[mealIndex]) {
+            suggestions.push({ 
+              mealId: allMeals[mealIndex].MealID, 
+              dayOfWeek: day, 
+              mealSlot: slot 
+            });
+          }
         }
       }
       return suggestions;
+    }
+
+    // If no meals exist, return empty array to trigger conversation flow
+    if (allMeals.length === 0) {
+      console.log('No meals available for family - returning empty suggestions to prompt conversation');
+      return [];
     }
 
     const response = await openai.chat.completions.create({
@@ -164,7 +361,7 @@ export async function suggestMeals(familyId: number): Promise<MealSuggestion[]> 
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `## Recent Meal History:\n${historySummary}\n\n## Available Meals:\n${availableMealsSummary}`,
+          content: `## Recent Meal History:\n${historySummary || 'No recent meal history'}\n\n## Available Meals:\n${availableMealsSummary}\n\n## Family Preferences:\n${factsSummary || 'No preferences recorded yet'}\n\n## Recent Food Conversations:\n${conversationContext || 'No recent food conversations'}`,
         },
       ],
       response_format: { type: 'json_object' },
@@ -176,13 +373,37 @@ export async function suggestMeals(familyId: number): Promise<MealSuggestion[]> 
     }
 
     const parsedJson = JSON.parse(content);
-    const suggestionsArray = Array.isArray(parsedJson) ? parsedJson : Object.values(parsedJson).find(Array.isArray);
-
-    if (!suggestionsArray) {
-      throw new Error('Could not find an array of suggestions in the OpenAI response.');
+    
+    // Handle both direct array (legacy) and object with suggestions property (new format)
+    let suggestionsArray: any[];
+    if (Array.isArray(parsedJson)) {
+      suggestionsArray = parsedJson;
+    } else if (parsedJson.suggestions && Array.isArray(parsedJson.suggestions)) {
+      suggestionsArray = parsedJson.suggestions;
+    } else {
+      // Try to find any array in the response object
+      const foundArray = Object.values(parsedJson).find(value => Array.isArray(value));
+      if (foundArray) {
+        suggestionsArray = foundArray as any[];
+      } else {
+        console.error('OpenAI response structure:', JSON.stringify(parsedJson, null, 2));
+        throw new Error('Could not find an array of suggestions in the OpenAI response.');
+      }
     }
 
-    // TODO: Add validation for the suggestions array structure
+    // Validate the suggestions array structure
+    if (!Array.isArray(suggestionsArray)) {
+      throw new Error('Suggestions is not an array.');
+    }
+
+    // Basic validation of each suggestion object
+    for (const suggestion of suggestionsArray) {
+      if (typeof suggestion.mealId !== 'number' || 
+          typeof suggestion.dayOfWeek !== 'number' || 
+          typeof suggestion.mealSlot !== 'string') {
+        console.warn('Invalid suggestion object:', suggestion);
+      }
+    }
 
     return suggestionsArray as MealSuggestion[];
 

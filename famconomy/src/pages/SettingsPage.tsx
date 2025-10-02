@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Settings,
@@ -26,6 +25,8 @@ import { deleteUser as deleteUserApi } from '../api/users';
 import apiClient from '../api/apiClient';
 import { toast } from 'react-toastify';
 import { getIntegrationStatus, disconnectInstacart } from '../api/integrations';
+import { ScreenTimePanel } from '../components/screen-time/ScreenTimePanel';
+import { useFamily } from '../hooks/useFamily';
 
 // Function to convert VAPID public key to Uint8Array
 const urlBase64ToUint8Array = (base64String: string) => {
@@ -47,6 +48,7 @@ export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { rewardMode } = useFamily(); // Assumes useFamily provides rewardMode
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -314,6 +316,13 @@ export const SettingsPage: React.FC = () => {
               </div>
             </div>
           </section>
+
+          {/* Conditionally render ScreenTimePanel if rewardMode is 'screenTime' or 'hybrid' */}
+          {(rewardMode === 'screenTime' || rewardMode === 'hybrid') && (
+            <section id="screen-time" className="bg-white dark:bg-neutral-800 rounded-2xl shadow-card p-6">
+              <ScreenTimePanel />
+            </section>
+          )}
 
           {/* Other sections... */}
         </div>

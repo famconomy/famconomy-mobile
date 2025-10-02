@@ -61,10 +61,11 @@ export const getMyFamily = async (req: Request & { userId?: string }, res: Respo
     });
 
     const formattedFamilies = families.map(family => {
-      const { FamilyUsers, FamilyValues, ...familyData } = family;
+      const { FamilyUsers, FamilyValues, rewardMode, ...familyData } = family;
       return {
         ...familyData,
         FamilyValues: parseFamilyValues(FamilyValues),
+        rewardMode,
         members: FamilyUsers.map(member => ({
           ...member.Users,
           RelationshipID: member.RelationshipID,
@@ -85,7 +86,7 @@ export const getMyFamily = async (req: Request & { userId?: string }, res: Respo
 
 export const createFamily = async (req: Request & { userId?: string }, res: Response) => {
   console.log('--- DEBUG: createFamily controller called ---');
-  const { familyName } = req.body;
+  const { familyName, rewardMode } = req.body;
   const userId = req.userId;
 
   if (!userId) {
@@ -112,6 +113,7 @@ export const createFamily = async (req: Request & { userId?: string }, res: Resp
         data: {
           FamilyName: familyName,
           CreatedByUserID: userId,
+          rewardMode: rewardMode || 'points',
         },
       });
 
@@ -136,7 +138,7 @@ export const createFamily = async (req: Request & { userId?: string }, res: Resp
 // Update a family
 export const updateFamily = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { FamilyName, FamilyMantra, familyName, familyMantra, FamilyValues, familyValues } = req.body;
+  const { FamilyName, FamilyMantra, familyName, familyMantra, FamilyValues, familyValues, rewardMode } = req.body;
 
   const nextName = FamilyName ?? familyName;
   const nextMantra = FamilyMantra ?? familyMantra;
@@ -153,11 +155,13 @@ export const updateFamily = async (req: Request, res: Response) => {
         FamilyName: nextName,
         FamilyMantra: nextMantra ?? null,
         FamilyValues: serializeFamilyValues(nextValues),
+        ...(rewardMode ? { rewardMode } : {}),
       },
     });
     res.json({
       ...updatedFamily,
       FamilyValues: parseFamilyValues(updatedFamily.FamilyValues),
+      rewardMode: updatedFamily.rewardMode,
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });

@@ -218,15 +218,15 @@ export const FamilyPage: React.FC = () => {
     }
   };
 
-  const handleSaveSettings = async (familyName: string, familyMantra: string) => {
+  const handleSaveSettings = async (familyName: string, familyMantra: string, _unused?: string[], rewardMode?: string) => {
     if (!family) return;
-
     try {
       await updateFamily(
         family.FamilyID.toString(),
         familyName,
         familyMantra,
-        family.FamilyValues ?? []
+        family.FamilyValues ?? [],
+        rewardMode
       );
       setShowSettingsModal(false);
       await refetchFamily();

@@ -1,8 +1,32 @@
 import apiClient from './apiClient';
 import { Meal, MealSuggestion } from '../types';
 
-export const getMealSuggestions = async (familyId: number): Promise<MealSuggestion[]> => {
-  const response = await apiClient.get('/linz/meal-suggestions', { params: { familyId } });
+export const getMealSuggestions = async (
+  familyId: number, 
+  options?: {
+    mealSlots?: ('BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK')[];
+    daysToSuggest?: number;
+    forceRefresh?: boolean;
+  }
+): Promise<MealSuggestion[]> => {
+  const params: any = { familyId };
+  
+  if (options?.mealSlots) {
+    params.mealSlots = options.mealSlots.join(',');
+  }
+  if (options?.daysToSuggest) {
+    params.daysToSuggest = options.daysToSuggest;
+  }
+  if (options?.forceRefresh) {
+    params.forceRefresh = options.forceRefresh;
+  }
+  
+  const response = await apiClient.get('/linz/meal-suggestions', { params });
+  return response.data;
+};
+
+export const getMealNameSuggestions = async (familyId: number): Promise<string[]> => {
+  const response = await apiClient.get('/linz/meal-name-suggestions', { params: { familyId } });
   return response.data;
 };
 

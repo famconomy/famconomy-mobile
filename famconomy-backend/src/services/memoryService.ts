@@ -137,7 +137,8 @@ async function fetchUnconsolidatedMemoryBatches({
   const cutoff = new Date();
   cutoff.setHours(cutoff.getHours() - windowHours);
 
-  const rawMemories = await prisma.linZConversation.findMany({
+  // Fetch unconsolidated LinZConversation entries
+  const rawConversations = await prisma.linZConversation.findMany({
     where: {
       consolidatedAt: null,
       createdAt: { gte: cutoff },
@@ -146,8 +147,25 @@ async function fetchUnconsolidatedMemoryBatches({
     orderBy: { createdAt: 'asc' },
   });
 
+  // Fetch all LinZMemory entries (not time-limited, not consolidated)
+  const rawMemories = await prisma.linZMemory.findMany();
+
   const batches: { [key: string]: ConsolidationBatch } = {};
 
+  // Add LinZConversation entries to batches
+  for (const conv of rawConversations) {
+    const batchKey = `${conv.familyId}-${conv.userId || 'null'}`;
+    if (!batches[batchKey]) {
+      batches[batchKey] = {
+        familyId: conv.familyId,
+        userId: conv.userId,
+        conversations: [],
+      };
+    }
+    batches[batchKey].conversations.push(conv);
+  }
+
+  // Add LinZMemory entries to batches as pseudo-conversations
   for (const mem of rawMemories) {
     const batchKey = `${mem.familyId}-${mem.userId || 'null'}`;
     if (!batches[batchKey]) {
@@ -157,7 +175,16 @@ async function fetchUnconsolidatedMemoryBatches({
         conversations: [],
       };
     }
-    batches[batchKey].conversations.push(mem);
+    batches[batchKey].conversations.push({
+      id: mem.id,
+      familyId: mem.familyId,
+      userId: mem.userId,
+      kind: 'memory',
+      content: mem.value,
+      createdAt: mem.createdAt,
+      updatedAt: mem.updatedAt,
+      consolidatedAt: null,
+    });
   }
 
   return Object.values(batches);
@@ -258,10 +285,10 @@ export async function runConsolidationJob(now: Date = new Date()) {
         // Upsert new and updated facts
         for (const f of [...modelJson.new_facts, ...modelJson.updated_facts]) {
           await tx.linZFacts.upsert({
-            where: { familyId_key_userId: { familyId, userId: f.userId ?? null, key: f.key } },
+            where: { familyId_key_userId: { familyId, userId: f.userId, key: f.key } },
             create: {
               familyId,
-              userId: f.userId ?? null,
+              userId: f.userId,
               key: f.key,
               value: f.value,
               confidence: f.confidence ?? 0.9,
