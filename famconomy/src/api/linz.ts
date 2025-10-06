@@ -33,12 +33,14 @@ export const getMealNameSuggestions = async (familyId: number): Promise<string[]
 export const generateMealWithIngredients = async (
   mealName: string,
   familyId: number,
-  userId: string
+  userId: string,
+  mealId?: number
 ): Promise<Meal> => {
   const response = await apiClient.post('/linz/generate-ingredients', {
     mealName,
     familyId,
     userId,
+    mealId,
   });
   return response.data;
 };

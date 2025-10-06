@@ -1,15 +1,30 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, Filter, Search, ShoppingCart, MoreVertical, Check, X, Archive, Share2, Copy, Home, Circle, Users, GraduationCap, Package, User, Calendar, List, Wand2 } from 'lucide-react';
-import { ShoppingList, ShoppingItem, ShoppingCategory, Meal, MealPlanWeek, MealSlot } from '../types';
+import { Plus, Search, ShoppingCart, MoreVertical, Check, Archive, Share2, Copy, Home, Circle, GraduationCap, Package, User, Calendar, List, Wand2, BookOpen, Link2 } from 'lucide-react';
+import { ShoppingList, ShoppingItem, ShoppingCategory, Meal, MealSlot } from '../types';
+
+interface MealPlanWeek {
+  WeekStart: string;
+  Entries: Array<{
+    DayOfWeek: number;
+    MealSlot: MealSlot;
+    MealID: number;
+    Meal?: Meal;
+    Servings?: number;
+    Notes?: string;
+  }>;
+}
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
+// Temporarily removing drag-and-drop imports until packages are properly installed
+// import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
+// import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '../hooks/useAuth';
 import { useFamily } from '../hooks/useFamily';
 import { useLinZChat } from '../hooks/useLinZChat';
 import { getShoppingLists, createShoppingList, archiveShoppingList, deleteShoppingList, addMealPlanToShoppingList } from '../api/shoppingLists';
 import { getShoppingItems, createShoppingItem, updateShoppingItem } from '../api/shoppingItems';
-import { getMeals, getMealPlan, upsertMealPlanEntry } from '../api/meals';
+import { getMeals, getMealPlan, upsertMealPlanEntry, convertMealToRecipe } from '../api/meals';
 import { generateMealWithIngredients, getMealSuggestions, getMealNameSuggestions } from '../api/linz';
 import { MealSuggestion } from '../types';
 import { getIntegrationStatus } from '../api/integrations';
@@ -50,6 +65,7 @@ export const ShoppingPage: React.FC = () => {
   const [suggestedMealNames, setSuggestedMealNames] = useState<string[]>([]);
   const [isLoadingSuggestedNames, setIsLoadingSuggestedNames] = useState(false);
   const [selectedMealSlots, setSelectedMealSlots] = useState<('BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK')[]>(['DINNER']);
+  const [selectedSlot, setSelectedSlot] = useState<{ day: number; slot: MealSlot } | null>(null);
 
   const handleSeeAllSuggestions = () => {
     if (meals.length === 0) {
@@ -131,14 +147,22 @@ export const ShoppingPage: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const fetchShoppingData = useCallback(async () => {
+  const fetchShoppingData = useCallback(async (preserveSelectedList = false) => {
     if (!family) return;
     try {
       setIsLoading(true);
       const listsData = await getShoppingLists(family.FamilyID.toString(), filter);
       setShoppingLists(listsData);
-      if (listsData.length > 0) {
+      
+      if (!preserveSelectedList && listsData.length > 0) {
         setSelectedList(listsData[0]);
+      } else if (preserveSelectedList) {
+        // Find the updated version of the currently selected list using the ID from closure
+        setSelectedList(currentSelected => {
+          if (!currentSelected) return currentSelected;
+          const updatedSelectedList = listsData.find(list => list.ShoppingListID === currentSelected.ShoppingListID);
+          return updatedSelectedList || currentSelected;
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -209,7 +233,7 @@ export const ShoppingPage: React.FC = () => {
       setNewItemUnit('');
       setNewItemCategoryID(null);
       setShowNewItemModal(false);
-      fetchShoppingData();
+      fetchShoppingData(true); // Preserve selected list when adding items
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create item');
     }
@@ -232,6 +256,56 @@ export const ShoppingPage: React.FC = () => {
     } finally {
       setIsCreatingMeal(false);
     }
+  };
+
+  // Clickable Meal Suggestion Component
+  const ClickableMealSuggestion = ({ meal, suggestion }: { meal: Meal; suggestion: MealSuggestion }) => {
+    return (
+      <div
+        onClick={() => handleSuggestionClick(suggestion, meal)}
+        className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-primary-200 dark:border-primary-700 bg-primary-50/30 dark:bg-primary-900/20 cursor-pointer hover:bg-primary-100/50 dark:hover:bg-primary-900/30 transition-colors"
+      >
+        <div className="flex-1">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-neutral-900 dark:text-white text-sm">{meal.Title}</h4>
+            <span className="text-xs text-primary-600 dark:text-primary-400">
+              {suggestion.mealSlot.toLowerCase()} • {weekDays[suggestion.dayOfWeek]}
+            </span>
+          </div>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">Click to assign to selected slot</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {meal.Tags?.slice(0, 3).map(tag => (
+              <span key={tag.MealTagID} className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300">
+                {tag.Tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Clickable Meal Slot Component
+  const ClickableMealSlot = ({ dayIndex, slot, children }: { dayIndex: number; slot: MealSlot; children: React.ReactNode }) => {
+    const isSelected = selectedSlot?.day === dayIndex && selectedSlot?.slot === slot;
+    
+    return (
+      <div 
+        onClick={() => handleSlotClick(dayIndex, slot)}
+        className={`rounded-xl border border-dashed p-3 min-h-[110px] flex flex-col gap-3 transition-all cursor-pointer ${
+          isSelected
+            ? 'border-primary-500 bg-primary-50/50 dark:bg-primary-900/30 scale-105' 
+            : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50/60 dark:bg-neutral-800/40 hover:border-primary-300 hover:bg-primary-50/20 dark:hover:bg-primary-900/10'
+        }`}
+      >
+        {children}
+        {isSelected && (
+          <div className="text-xs text-primary-600 dark:text-primary-400 font-medium">
+            Click a suggestion to assign →
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleGetSuggestions = async (forceRefresh = false) => {
@@ -282,6 +356,29 @@ export const ShoppingPage: React.FC = () => {
       setIsSuggesting(false);
     }
   };
+
+  // Click Handlers for Meal Assignment
+  const handleSuggestionClick = async (suggestion: MealSuggestion, meal: Meal) => {
+    if (!selectedSlot) {
+      toast.error('Please select a meal slot first by clicking on a calendar day and time');
+      return;
+    }
+    
+    try {
+      await handleAssignMeal(selectedSlot.day, selectedSlot.slot, meal.MealID);
+      setSuggestions(prev => prev.filter(s => s !== suggestion));
+      toast.success(`${meal.Title} assigned to ${selectedSlot.slot.toLowerCase()} for ${weekDays[selectedSlot.day]}`);
+      setSelectedSlot(null);
+    } catch (error) {
+      toast.error('Failed to assign meal');
+    }
+  };
+
+  const handleSlotClick = (day: number, slot: MealSlot) => {
+    setSelectedSlot({ day, slot });
+    toast.info(`Selected ${slot.toLowerCase()} for ${weekDays[day]}. Now click a meal suggestion to assign it.`);
+  };
+
   const handleDeleteList = async () => {
     if (!selectedList) return;
     try {
@@ -390,17 +487,61 @@ export const ShoppingPage: React.FC = () => {
   const handleAssignMeal = async (dayIndex: number, slot: MealSlot, mealId: number) => {
     if (!family || !user) return;
     try {
+      // Find the meal to check if it has ingredients
+      const meal = meals.find(m => m.MealID === mealId);
+      if (!meal) {
+        toast.error('Meal not found');
+        return;
+      }
+
+      // Check if the meal has ingredients
+      if (!meal.Ingredients || meal.Ingredients.length === 0) {
+        toast.info(`Generating ingredients for ${meal.Title}...`);
+        
+        try {
+          // Generate ingredients using OpenAI
+          const updatedMeal = await generateMealWithIngredients(
+            meal.Title,
+            family.FamilyID,
+            user.id,
+            meal.MealID
+          );
+          
+          // Update the local meals state with the new ingredients
+          setMeals(prevMeals => 
+            prevMeals.map(m => m.MealID === mealId ? updatedMeal : m)
+          );
+          
+          toast.success(`Generated ${updatedMeal.Ingredients.length} ingredients for ${meal.Title}`);
+        } catch (ingredientError) {
+          console.error('Failed to generate ingredients:', ingredientError);
+          toast.error('Failed to generate ingredients, but meal will still be added to plan');
+          // Continue with meal plan assignment even if ingredient generation fails
+        }
+      }
+
       await upsertMealPlanEntry(family.FamilyID, {
         WeekStart: selectedWeekStart,
         DayOfWeek: dayIndex,
         MealSlot: slot,
         MealID: mealId,
-        Servings: meals.find(m => m.MealID === mealId)?.DefaultServings ?? 4,
+        Servings: meal.DefaultServings ?? 4,
         AddedByUserID: user.id,
       });
       fetchMealsData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add meal');
+    }
+  };
+
+  const handleConvertMealToRecipe = async (meal: Meal) => {
+    try {
+      toast.info(`Converting ${meal.Title} to recipe...`);
+      const result = await convertMealToRecipe(meal.MealID);
+      toast.success(`${meal.Title} converted to recipe! Recipe ID: ${result.recipe.RecipeID}`);
+      fetchMealsData(); // Refresh meals to show updated recipe link
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to convert meal to recipe');
     }
   };
 
@@ -415,7 +556,8 @@ export const ShoppingPage: React.FC = () => {
     try {
       await addMealPlanToShoppingList(family.FamilyID, selectedWeekStart, selectedList.ShoppingListID);
       toast.success('Ingredients from your meal plan have been added to the list!');
-      fetchShoppingData(); // Refresh the shopping list data
+      fetchShoppingData(true); // Refresh the shopping list data, preserving selected list
+      setActiveTab('lists'); // Switch to Lists tab to show the updated shopping list
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not generate shopping list.');
     }
@@ -426,7 +568,7 @@ export const ShoppingPage: React.FC = () => {
 
   const renderMealPlanner = () => (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
         <div className="lg:w-2/3 bg-white dark:bg-neutral-800 rounded-2xl shadow-card p-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
             <div>
@@ -477,9 +619,7 @@ export const ShoppingPage: React.FC = () => {
 
                       return (
                         <td key={key} className="align-top px-2">
-                          <div className={`rounded-xl border border-dashed p-3 min-h-[110px] flex flex-col gap-3 transition-all ${
-                            suggestion ? 'border-primary-500 animate-pulse-slow' : 'border-neutral-200 dark:border-neutral-700'
-                          } bg-neutral-50/60 dark:bg-neutral-800/40`}>
+                          <ClickableMealSlot dayIndex={index} slot={slot}>
                             {entry ? (
                               <div>
                                 <div className="font-semibold text-neutral-900 dark:text-white truncate">{entry.Meal?.Title ?? 'Meal removed'}</div>
@@ -514,7 +654,7 @@ export const ShoppingPage: React.FC = () => {
                                 ))}
                               </div>
                             </div>
-                          </div>
+                          </ClickableMealSlot>
                         </td>
                       );
                     })}
@@ -538,7 +678,24 @@ export const ShoppingPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-neutral-900 dark:text-white">{meal.Title}</h4>
-                        {meal.IsFavorite && <span className="text-xs text-primary-500">Favorite</span>}
+                        <div className="flex items-center gap-2">
+                          {meal.Recipe ? (
+                            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <Link2 size={12} />
+                              Recipe
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleConvertMealToRecipe(meal)}
+                              className="text-xs text-neutral-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1 transition-colors"
+                              title="Convert to Recipe"
+                            >
+                              <BookOpen size={12} />
+                              Recipe
+                            </button>
+                          )}
+                          {meal.IsFavorite && <span className="text-xs text-primary-500">Favorite</span>}
+                        </div>
                       </div>
                       <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2">{meal.Description || 'No description yet.'}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -590,6 +747,29 @@ export const ShoppingPage: React.FC = () => {
               )}
             </div>
           </div>
+
+          {suggestions.length > 0 && (
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">LinZ Suggestions</h3>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">Click slot, then click suggestion</span>
+              </div>
+              <div className="space-y-3">
+                {suggestions.map((suggestion, index) => {
+                  const meal = meals.find(m => m.MealID === suggestion.mealId);
+                  if (!meal) return null;
+                  
+                  return (
+                    <ClickableMealSuggestion
+                      key={`${suggestion.mealId}-${suggestion.dayOfWeek}-${suggestion.mealSlot}-${index}`}
+                      meal={meal}
+                      suggestion={suggestion}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-card p-4">
             <h3 className="text-lg font-semibold text-neutral-900 dark:text-white mb-3">Meal Types</h3>

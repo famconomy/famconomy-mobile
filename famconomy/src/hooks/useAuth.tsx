@@ -51,8 +51,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (credentials: LoginCredentials) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      // Optional demo account support
-      if (credentials.email === 'admin@example.com' && credentials.password === 'password') {
+      // Demo account support only in development
+      if (process.env.NODE_ENV !== 'production' && 
+          credentials.email === 'admin@example.com' && 
+          credentials.password === 'password') {
         setState({
           user: {
             id: 'demo-admin',

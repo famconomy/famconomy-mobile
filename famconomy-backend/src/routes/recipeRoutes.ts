@@ -11,6 +11,7 @@ import {
   createRecipeMemory,
   listRecipeMemories,
   toggleRecipeFavorite,
+  createMealFromRecipe,
 } from '../controllers/recipeController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { upload } from '../middleware/upload';
@@ -30,5 +31,8 @@ router.post('/:familyId/recipes/:recipeId/share', shareRecipe);
 router.post('/:familyId/recipes/:recipeId/memories', createRecipeMemory);
 router.get('/:familyId/recipes/:recipeId/memories', listRecipeMemories);
 router.post('/:familyId/recipes/:recipeId/favorite', toggleRecipeFavorite);
+
+// Recipe-Meal conversion
+router.post('/:familyId/recipes/:recipeId/create-meal', createMealFromRecipe);
 
 export default router;

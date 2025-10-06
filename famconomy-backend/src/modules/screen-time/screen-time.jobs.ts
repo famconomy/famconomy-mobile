@@ -11,8 +11,7 @@ export const screenTimeWorker = new Worker<GrantCommand>('screen-time-grants', a
   const provider = cmd.source.kind === 'manual' ? AppleScreenTimeProvider : GoogleScreenTimeProvider;
   const result = await provider.applyAllowanceDelta(cmd.childId, cmd.minutes);
   // Write ScreenTimeGrant and update RewardLedger
-  const { PrismaClient } = await import('@prisma/client');
-  const prisma = new PrismaClient();
+  const { prisma } = await import('../../db');
   try {
     await prisma.ScreenTimeGrant.create({
       data: {

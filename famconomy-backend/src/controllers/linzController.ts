@@ -148,7 +148,7 @@ export const getMealNameSuggestions = async (req: Request, res: Response) => {
 };
 
 export const generateAndSaveIngredients = async (req: Request, res: Response) => {
-  const { mealName, familyId, userId } = req.body;
+  const { mealName, familyId, userId, mealId } = req.body;
 
   if (!mealName || !familyId || !userId) {
     return res.status(400).json({ error: 'mealName, familyId, and userId are required.' });
@@ -170,27 +170,66 @@ export const generateAndSaveIngredients = async (req: Request, res: Response) =>
     // 2. Generate ingredients using the new service
     const ingredients = await generateIngredientsForMeal(mealName, familySize);
 
-    // 3. Save the meal and ingredients in a transaction
-    const newMeal = await prisma.meal.create({
-      data: {
-        Title: mealName,
-        FamilyID: familyId,
-        CreatedByUserID: userId,
-        DefaultServings: familySize,
-        Ingredients: {
-          create: ingredients.map(ing => ({
-            Name: ing.name,
-            Quantity: ing.quantity,
-            Unit: ing.unit,
-          })),
-        },
-      },
-      include: {
-        Ingredients: true, // Include the ingredients in the response
-      },
-    });
+    let updatedMeal;
 
-    res.status(201).json(newMeal);
+    // 3. If mealId is provided, update existing meal with ingredients
+    if (mealId) {
+      // Check if meal exists and belongs to the family
+      const existingMeal = await prisma.meal.findFirst({
+        where: { 
+          MealID: mealId, 
+          FamilyID: familyId 
+        },
+        include: { Ingredients: true }
+      });
+
+      if (!existingMeal) {
+        return res.status(404).json({ error: 'Meal not found or does not belong to this family.' });
+      }
+
+      // Update the existing meal with generated ingredients
+      updatedMeal = await prisma.meal.update({
+        where: { MealID: mealId },
+        data: {
+          Ingredients: {
+            // Delete existing ingredients and create new ones
+            deleteMany: {},
+            create: ingredients.map(ing => ({
+              Name: ing.name,
+              Quantity: ing.quantity,
+              Unit: ing.unit,
+            })),
+          },
+        },
+        include: {
+          Ingredients: true,
+          Tags: true,
+        },
+      });
+    } else {
+      // 4. Create a new meal if no mealId provided (original behavior)
+      updatedMeal = await prisma.meal.create({
+        data: {
+          Title: mealName,
+          FamilyID: familyId,
+          CreatedByUserID: userId,
+          DefaultServings: familySize,
+          Ingredients: {
+            create: ingredients.map(ing => ({
+              Name: ing.name,
+              Quantity: ing.quantity,
+              Unit: ing.unit,
+            })),
+          },
+        },
+        include: {
+          Ingredients: true,
+          Tags: true,
+        },
+      });
+    }
+
+    res.status(mealId ? 200 : 201).json(updatedMeal);
   } catch (error) {
     console.error('Error generating and saving ingredients:', error);
     res.status(500).json({ error: 'Failed to process your request.' });

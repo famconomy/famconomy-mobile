@@ -88,3 +88,13 @@ export const toggleRecipeFavorite = async (
   const response = await apiClient.post(`/recipes/${familyId}/recipes/${recipeId}/favorite`);
   return response.data;
 };
+
+// Create quick meal plan entry from recipe
+export const createMealFromRecipe = async (
+  familyId: number,
+  recipeId: number,
+  payload?: { servings?: number; notes?: string }
+) => {
+  const response = await apiClient.post(`/recipes/${familyId}/recipes/${recipeId}/create-meal`, payload || {});
+  return response.data;
+};

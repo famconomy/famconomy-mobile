@@ -58,3 +58,15 @@ export const upsertMealPlanEntry = async (familyId: number | string, payload: Me
 export const deleteMealPlanEntry = async (entryId: number | string) => {
   await apiClient.delete(`/meals/plan/entry/${entryId}`);
 };
+
+// Convert meal to recipe
+export const convertMealToRecipe = async (mealId: number | string) => {
+  const response = await apiClient.post(`/meals/meals/${mealId}/convert-to-recipe`);
+  return response.data;
+};
+
+// Link meal to existing recipe
+export const linkMealToRecipe = async (mealId: number | string, recipeId: number) => {
+  const response = await apiClient.put(`/meals/meals/${mealId}/link-recipe`, { recipeId });
+  return response.data;
+};

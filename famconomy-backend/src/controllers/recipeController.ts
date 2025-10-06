@@ -534,3 +534,64 @@ export const importRecipeFromScan = async (req: Request, res: Response) => {
     await fs.unlink(file.path).catch(() => undefined);
   }
 };
+
+export const createMealFromRecipe = async (req: Request, res: Response) => {
+  const { familyId, recipeId } = req.params;
+  const { servings, notes } = req.body;
+  const userId = (req as any).userId ?? (req.headers['x-user-id'] as string | undefined);
+
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing user context.' });
+  }
+
+  try {
+    // Get the recipe with ingredients
+    const recipe = await prisma.recipe.findFirst({
+      where: { 
+        RecipeID: Number(recipeId),
+        FamilyID: Number(familyId)
+      },
+      include: {
+        Ingredients: true,
+      },
+    });
+
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    // Create meal from recipe
+    const meal = await prisma.meal.create({
+      data: {
+        FamilyID: Number(familyId),
+        RecipeID: recipe.RecipeID,
+        Title: recipe.Title,
+        Description: recipe.Description,
+        Instructions: recipe.Steps?.length > 0 ? 
+          recipe.Steps.map(step => step.Instruction).join('\n\n') : 
+          undefined,
+        DefaultServings: servings || recipe.Servings || 4,
+        CreatedByUserID: userId,
+        Status: 'ACTIVE',
+        Ingredients: {
+          create: recipe.Ingredients.map((ingredient) => ({
+            Name: ingredient.Name,
+            Quantity: ingredient.Quantity ? parseFloat(ingredient.Quantity) : null,
+            Unit: null, // Recipe ingredients use string quantity, so we'll keep unit in the quantity field
+            Notes: ingredient.Notes,
+          })),
+        },
+      },
+      include: {
+        Ingredients: true,
+        Tags: true,
+        Recipe: true,
+      },
+    });
+
+    res.status(201).json(meal);
+  } catch (error) {
+    console.error('createMealFromRecipe error', error);
+    res.status(500).json({ error: 'Failed to create meal from recipe' });
+  }
+};

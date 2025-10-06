@@ -159,7 +159,7 @@ const ProtectedRouteWrapper: React.FC<{ children: React.ReactNode; hasExistingFa
   }
 
   const onboardingComplete = onboardingState.currentStep === 'committed' || onboardingState.currentStep === 'completed';
-  const shouldForceOnboarding = !onboardingComplete && location.pathname !== '/onboarding';
+  const shouldForceOnboarding = !onboardingComplete && !_hasExistingFamily && location.pathname !== '/onboarding';
 
   if (shouldForceOnboarding) {
     return <Navigate to="/onboarding" replace state={{ from: location.pathname }} />;
@@ -181,7 +181,7 @@ const AppContentRoutes: React.FC<AppContentRoutesProps> = ({ familyId, hasExisti
   const authLoading = Boolean(auth.isLoading);
   const location = useLocation();
   const navigate = useNavigate();
-  const userId = user?.UserID ?? (user as any)?.id ?? null;
+  const userId = user?.id ?? (user as any)?.UserID ?? null;
 
   const onboarding = useOnboardingContext();
   const { state: onboardingState, markCompleted } = onboarding;
@@ -235,17 +235,56 @@ const AppContentRoutes: React.FC<AppContentRoutesProps> = ({ familyId, hasExisti
 
   const shouldRedirectToOnboarding = useMemo(() => {
     // Wait for both auth and family context to finish loading
-    if (!isAuthenticated || authLoading) return false;
+    if (!isAuthenticated || authLoading) {
+      console.log('🔄 Onboarding redirect: waiting for auth', { isAuthenticated, authLoading });
+      return false;
+    }
     if (!isAppShell) return false;
-    if (!onboardingState.hydrated || onboardingState.loading) return false;
-    // Wait for family context to finish loading
-    if (typeof isFamilyContextReady !== 'undefined' && !isFamilyContextReady) return false;
+    if (!onboardingState.hydrated || onboardingState.loading) {
+      console.log('🔄 Onboarding redirect: waiting for onboarding state', { 
+        hydrated: onboardingState.hydrated, 
+        loading: onboardingState.loading 
+      });
+      return false;
+    }
+    // Wait for family context to finish loading - this is critical to prevent race conditions
+    if (!isFamilyContextReady) {
+      console.log('🔄 Onboarding redirect: waiting for family context', { isFamilyContextReady });
+      return false;
+    }
+    
+    // Skip onboarding redirect if user is already on an app route - this prevents redirect loops on refresh
+    if (location.pathname !== '/' && location.pathname !== '/app') {
+      console.log('✅ Onboarding redirect: user on specific app route, staying', { pathname: location.pathname });
+      return false;
+    }
+    
+    // If user has an existing family, they should never be redirected to onboarding
+    // This handles the case where users have families but don't have onboarding status set correctly
+    if (hasExistingFamily) {
+      console.log('✅ Onboarding redirect: user has existing family, staying on current page', { 
+        hasExistingFamily, 
+        familyId
+      });
+      return false;
+    }
+    
     const onboardingComplete = onboardingState.currentStep === 'committed' || onboardingState.currentStep === 'completed';
-    if (onboardingComplete) return false;
-    if (hasExistingFamily) return false;
+    if (onboardingComplete) {
+      console.log('✅ Onboarding redirect: onboarding complete', { currentStep: onboardingState.currentStep });
+      return false;
+    }
+    
     if (location.pathname.startsWith('/onboarding')) return false;
+    
+    console.log('⚠️ Redirecting to onboarding', {
+      hasExistingFamily,
+      familyId,
+      onboardingStep: onboardingState.currentStep,
+      pathname: location.pathname
+    });
     return true;
-  }, [hasExistingFamily, isAppShell, isAuthenticated, authLoading, onboardingState.currentStep, onboardingState.hydrated, onboardingState.loading, location.pathname]);
+  }, [hasExistingFamily, isAppShell, isAuthenticated, authLoading, onboardingState.currentStep, onboardingState.hydrated, onboardingState.loading, location.pathname, isFamilyContextReady, familyId]);
 
   React.useEffect(() => {
     if (shouldRedirectToOnboarding) {
@@ -337,12 +376,12 @@ const AppContentRoutes: React.FC<AppContentRoutesProps> = ({ familyId, hasExisti
 
 export const AppContent: React.FC = () => {
   const { user } = useAuth();
-  const userId = user?.UserID ?? (user as any)?.id ?? null;
+  const userId = user?.id ?? (user as any)?.UserID ?? null;
   const { activeFamilyId, family, families, isLoading: isFamilyLoading } = useFamily();
-  const fallbackFamilyId = user?.FamilyID ?? (user as any)?.familyId ?? null;
+  const fallbackFamilyId = user?.familyId ?? (user as any)?.FamilyID ?? null;
   const effectiveFamilyId = activeFamilyId ?? family?.FamilyID ?? fallbackFamilyId ?? null;
   const hasExistingFamily = Boolean(effectiveFamilyId) || (families?.length ?? 0) > 0;
-  const isFamilyContextReady = Boolean(effectiveFamilyId) || !isFamilyLoading;
+  const isFamilyContextReady = !isFamilyLoading;
 
   return (
     <LinZChatProvider familyId={effectiveFamilyId} userId={userId}>

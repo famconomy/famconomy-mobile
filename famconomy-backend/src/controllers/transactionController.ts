@@ -1,23 +1,43 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
+import { logger } from '../utils/logger';
+import { verifyBudgetAccess } from '../utils/authUtils';
 
 // Create a new transaction
 export const createTransaction = async (req: Request, res: Response) => {
-  const { BudgetID, Amount, CategoryID, Description, Date, ProviderID, CreatedByUserID } = req.body;
+  const { BudgetID, Amount, CategoryID, Description, Date, ProviderID } = req.body;
+  const userId = req.userId;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (!BudgetID || !Amount) {
+    return res.status(400).json({ error: 'BudgetID and Amount are required' });
+  }
+
   try {
+    // Verify user can access this budget
+    const hasAccess = await verifyBudgetAccess(userId, BudgetID);
+    if (!hasAccess) {
+      logger.warn('Unauthorized transaction creation attempt', { userId, budgetId: BudgetID });
+      return res.status(403).json({ error: 'Access denied. User cannot access this budget.' });
+    }
+
     const transaction = await prisma.transaction.create({
       data: {
         BudgetID,
         Amount,
         CategoryID,
         Description,
-        Date,
+        Date: Date ? new Date(Date) : new Date(),
         ProviderID,
-        CreatedByUserID,
+        CreatedByUserID: userId,
       },
     });
     res.status(201).json(transaction);
   } catch (error) {
+    logger.error('Error creating transaction', { userId, budgetId: BudgetID, error });
     res.status(500).json({ error: 'Internal server error' });
   }
 };

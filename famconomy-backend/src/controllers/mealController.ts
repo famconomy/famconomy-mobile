@@ -9,6 +9,17 @@ export const listMeals = async (req: Request, res: Response) => {
       include: {
         Ingredients: true,
         Tags: true,
+        Recipe: {
+          select: {
+            RecipeID: true,
+            Title: true,
+            Description: true,
+            Servings: true,
+            PrepMinutes: true,
+            CookMinutes: true,
+            CoverImageUrl: true,
+          },
+        },
       },
       orderBy: { UpdatedAt: 'desc' },
     });
@@ -200,5 +211,116 @@ export const deleteMealPlanEntry = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('deleteMealPlanEntry error', error);
     res.status(500).json({ error: 'Failed to delete meal plan entry' });
+  }
+};
+
+export const convertMealToRecipe = async (req: Request, res: Response) => {
+  const { mealId } = req.params;
+  
+  try {
+    // Get the meal with ingredients
+    const meal = await prisma.meal.findUnique({
+      where: { MealID: Number(mealId) },
+      include: {
+        Ingredients: true,
+        Tags: true,
+      },
+    });
+
+    if (!meal) {
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+
+    // Create recipe from meal
+    const recipe = await prisma.recipe.create({
+      data: {
+        FamilyID: meal.FamilyID,
+        Title: meal.Title,
+        Description: meal.Description,
+        Servings: meal.DefaultServings,
+        CreatedByUserID: meal.CreatedByUserID,
+        Ingredients: {
+          create: meal.Ingredients.map((ingredient, index) => ({
+            Name: ingredient.Name,
+            Quantity: ingredient.Quantity?.toString() || '',
+            Notes: ingredient.Notes,
+            SortOrder: index,
+          })),
+        },
+        Steps: meal.Instructions ? {
+          create: [{
+            Instruction: meal.Instructions,
+            SortOrder: 0,
+          }],
+        } : undefined,
+      },
+      include: {
+        Ingredients: true,
+        Steps: true,
+      },
+    });
+
+    // Link the meal to the new recipe
+    const updatedMeal = await prisma.meal.update({
+      where: { MealID: Number(mealId) },
+      data: { RecipeID: recipe.RecipeID },
+      include: {
+        Ingredients: true,
+        Tags: true,
+        Recipe: true,
+      },
+    });
+
+    res.json({ recipe, meal: updatedMeal });
+  } catch (error) {
+    console.error('convertMealToRecipe error', error);
+    res.status(500).json({ error: 'Failed to convert meal to recipe' });
+  }
+};
+
+export const linkMealToRecipe = async (req: Request, res: Response) => {
+  const { mealId } = req.params;
+  const { recipeId } = req.body;
+
+  if (!recipeId) {
+    return res.status(400).json({ error: 'recipeId is required' });
+  }
+
+  try {
+    // Verify recipe exists and belongs to the same family
+    const meal = await prisma.meal.findUnique({
+      where: { MealID: Number(mealId) },
+    });
+
+    if (!meal) {
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+
+    const recipe = await prisma.recipe.findFirst({
+      where: { 
+        RecipeID: Number(recipeId),
+        FamilyID: meal.FamilyID 
+      },
+    });
+
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found or does not belong to the same family' });
+    }
+
+    // Link meal to recipe
+    const updatedMeal = await prisma.meal.update({
+      where: { MealID: Number(mealId) },
+      data: { RecipeID: Number(recipeId) },
+      include: {
+        Ingredients: true,
+        Tags: true,
+        Recipe: true,
+      },
+    });
+
+    res.json(updatedMeal);
+  } catch (error) {
+    console.error('linkMealToRecipe error', error);
+    res.status(500).json({ error: 'Failed to link meal to recipe' });
   }
 };

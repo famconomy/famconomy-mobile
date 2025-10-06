@@ -3,14 +3,15 @@
   "version": "1.0.0",
   "main": "src/app.ts",
   "scripts": {
-    "dev": "ts-node --transpile-only src/app.ts",
+    "dev": "tsx src/app.ts",
     "build": "tsc",
     "start": "node -r dotenv/config dist/app.js",
     "test": "vitest run",
-    "import:sample-guidelines": "ts-node scripts/importSampleGuidelines.ts"
+    "test:security": "vitest run src/__tests__/security.test.ts",
+    "import:sample-guidelines": "tsx scripts/importSampleGuidelines.ts"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.10.1",
@@ -47,10 +48,13 @@
     "@types/nodemailer": "^6.4.14",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.16",
+    "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^2.1.1",
+    "@vitest/ui": "^2.1.9",
     "prisma": "^6.10.1",
+    "supertest": "^7.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.2.2",
-    "@vitest/coverage-v8": "^2.1.1",
-    "vitest": "^2.1.1"
+    "vitest": "^2.1.9"
   }
 }

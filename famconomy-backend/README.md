@@ -32,6 +32,31 @@ FamConomy Backend is the server-side component of the family finance management 
 - **Plaid Integration**: Connect to financial institutions for transaction data.
 - **Feedback System**: Endpoint for users to submit feedback and bug reports.
 
+## Security
+
+FamConomy implements comprehensive security measures to protect family financial data:
+
+- **🔐 Family-Centric Authorization**: All family-scoped operations verify user membership before data access
+- **🛡️ JWT Security**: HttpOnly cookies with secure session management
+- **📋 Structured Logging**: Automatic sensitive data sanitization in logs
+- **🔍 Authorization Middleware**: Route-level protection for all sensitive endpoints
+- **⚙️ Environment Validation**: Required secrets validation on startup
+
+For detailed security implementation, see:
+- [Security Documentation](../SECURITY.md)
+- [Security Audit Summary](../SECURITY_AUDIT_SUMMARY.md)
+
+### Required Environment Variables
+```bash
+# Required in production
+JWT_SECRET=your-jwt-secret-here
+SESSION_SECRET=your-session-secret-here
+
+# Optional but recommended
+REDIS_URL=redis://localhost:6379
+NODE_ENV=production
+```
+
 ## Technologies Used
 
 - **Node.js**: JavaScript runtime environment.
@@ -162,6 +187,42 @@ yarn dev
 ```
 
 The API will be accessible at `http://localhost:3000`.
+
+## Security Configuration
+
+### Required Environment Variables
+
+For production deployments, the following environment variables are **REQUIRED**:
+
+- `JWT_SECRET`: Strong secret key for JWT token signing (minimum 32 characters)
+- `SESSION_SECRET`: Strong secret key for session management (minimum 32 characters)
+- `NODE_ENV=production`: Enables production security measures
+
+### Session Management
+
+- **Development**: Uses in-memory session store (not suitable for production)
+- **Production**: Recommended to use Redis or similar external session store
+- Sessions use secure, HttpOnly cookies with appropriate SameSite settings
+
+### Authentication & Authorization
+
+- All API routes are protected by `authenticateToken` middleware
+- Family-specific resources require membership verification
+- Demo accounts are only available in development mode (`NODE_ENV !== 'production'`)
+
+### Data Protection
+
+- Sensitive data (passwords, tokens, Plaid credentials) are automatically sanitized in logs
+- Structured logging prevents accidental exposure of credentials
+- Plaid access tokens are stored securely and never logged in plain text
+
+### Testing Security
+
+Run security-focused tests:
+
+```bash
+npm run test:security
+```
 
 ## Project Structure
 

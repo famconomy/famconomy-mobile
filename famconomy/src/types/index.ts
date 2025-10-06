@@ -262,6 +262,7 @@ export interface Recipe {
   Steps: RecipeStep[];
   Memories?: RecipeMemory[];
   Favorites?: RecipeFavorite[];
+  Meals?: Meal[]; // Meals that reference this recipe
   isFavorite?: boolean;
 }
 
@@ -300,6 +301,7 @@ export interface MealIngredient {
 export interface Meal {
   MealID: number;
   FamilyID: number;
+  RecipeID?: number; // Optional link to Recipe
   Title: string;
   Description?: string;
   Instructions?: string;
@@ -311,6 +313,7 @@ export interface Meal {
   UpdatedAt: string;
   Ingredients: MealIngredient[];
   Tags: MealTag[];
+  Recipe?: Recipe; // Optional recipe details when included
 }
 
 export interface MealPlanEntry {

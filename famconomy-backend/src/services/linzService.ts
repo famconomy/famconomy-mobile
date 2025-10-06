@@ -219,7 +219,10 @@ export async function suggestMeals(
         WeekStart: { gte: eightWeeksAgo },
       },
     },
-    include: { Meal: true },
+    include: { 
+      Meal: true,
+      MealPlanWeek: true 
+    },
     orderBy: { MealPlanWeek: { WeekStart: 'desc' } },
   });
 
@@ -267,7 +270,10 @@ export async function suggestMeals(
   }
 
   // 4. Construct the prompt for OpenAI
-  const historySummary = history.map(h => ` - ${h.Meal.Title} on ${h.MealPlanWeek.WeekStart.toDateString()}`).join('\n');
+  const historySummary = history
+    .filter(h => h.Meal && h.MealPlanWeek)
+    .map(h => ` - ${h.Meal.Title} on ${h.MealPlanWeek.WeekStart.toDateString()}`)
+    .join('\n');
   const availableMealsSummary = allMeals.map(m => {
     const tags = m.Tags ? m.Tags.map(tag => tag.Tag).join(', ') : 'no tags';
     return ` - ${m.Title} (ID: ${m.MealID}) [Tags: ${tags}]`;

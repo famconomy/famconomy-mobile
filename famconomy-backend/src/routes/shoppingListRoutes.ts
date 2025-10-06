@@ -9,6 +9,7 @@ import {
   addMealPlanToShoppingList,
 } from '../controllers/shoppingListController';
 import { authenticateToken } from '../middleware/authMiddleware';
+import { requireFamilyMembership } from '../utils/authUtils';
 
 const router = express.Router();
 

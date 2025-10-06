@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
 import { Prisma, WalletLedgerType } from '@prisma/client';
+import express from 'express';
 import { prisma } from '../db';
-import { _createNotificationInternal } from './notificationController'; // Import _createNotificationInternal
+import { authenticateToken } from '../middleware/authMiddleware';
+import { logger } from '../utils/logger';
+import { verifyFamilyMembership, verifyTaskAccess } from '../utils/authUtils';
+import { constructFullName } from '../utils/userUtils';
+import { _createNotificationInternal } from './notificationController';
 import { transferFromFamilyToUserTx } from '../services/walletService';
 
 // Create a new task
@@ -171,12 +176,27 @@ const maybeTriggerTaskReward = async (task: any, tx: Prisma.TransactionClient) =
 
 export const createTask = async (req: Request, res: Response) => {
   const { FamilyID, Title, Description, DueDate, AssignedToUserID, CreatedByUserID, IsCustom, SuggestedByChildID, ApprovedByUserID, RewardType, RewardValue } = req.body;
+  const userId = req.userId;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
 
   if (!Title) {
     return res.status(400).json({ error: 'Title is required.' });
   }
 
+  if (!FamilyID) {
+    return res.status(400).json({ error: 'FamilyID is required.' });
+  }
+
   try {
+    // Verify user belongs to the family
+    const isMember = await verifyFamilyMembership(userId, FamilyID);
+    if (!isMember) {
+      logger.warn('Unauthorized task creation attempt', { userId, familyId: FamilyID });
+      return res.status(403).json({ error: 'Access denied. User is not a member of this family.' });
+    }
     const task = await _createTaskInternal({
       FamilyID,
       Title,
@@ -192,7 +212,7 @@ export const createTask = async (req: Request, res: Response) => {
     });
     res.status(201).json(task);
   } catch (error) {
-    console.error(error);
+    logger.error('Error creating task', { userId, familyId: FamilyID, error });
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -200,17 +220,68 @@ export const createTask = async (req: Request, res: Response) => {
 // Get all tasks for a family
 export const getTasks = async (req: Request, res: Response) => {
   const { familyId } = req.params;
+  const userId = req.userId;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const familyIdNumber = parseInt(familyId);
+  if (isNaN(familyIdNumber)) {
+    return res.status(400).json({ error: 'Invalid family ID' });
+  }
+
   try {
+    // Verify user belongs to the family
+    const isMember = await verifyFamilyMembership(userId, familyIdNumber);
+    if (!isMember) {
+      logger.warn('Unauthorized task access attempt', { userId, familyId: familyIdNumber });
+      return res.status(403).json({ error: 'Access denied. User is not a member of this family.' });
+    }
+
     const tasks = await prisma.task.findMany({
-      where: { FamilyID: parseInt(familyId) },
+      where: { FamilyID: familyIdNumber },
       include: {
-        attachments: true, // Include attachments
+        attachments: true,
+        Users_Task_AssignedToUserIDToUsers: {
+          select: {
+            UserID: true,
+            FirstName: true,
+            LastName: true,
+          },
+        },
+        Users_Task_CreatedByUserIDToUsers: {
+          select: {
+            UserID: true,
+            FirstName: true,
+            LastName: true,
+          },
+        },
       },
     });
-    console.log('Tasks with attachments:', JSON.stringify(tasks, null, 2));
-    res.json(tasks);
+
+    // Transform user data to include fullName for frontend compatibility
+    const transformedTasks = tasks.map(task => ({
+      ...task,
+      Users_Task_AssignedToUserIDToUsers: task.Users_Task_AssignedToUserIDToUsers ? {
+        ...task.Users_Task_AssignedToUserIDToUsers,
+        fullName: constructFullName(
+          task.Users_Task_AssignedToUserIDToUsers.FirstName,
+          task.Users_Task_AssignedToUserIDToUsers.LastName
+        )
+      } : null,
+      Users_Task_CreatedByUserIDToUsers: task.Users_Task_CreatedByUserIDToUsers ? {
+        ...task.Users_Task_CreatedByUserIDToUsers,
+        fullName: constructFullName(
+          task.Users_Task_CreatedByUserIDToUsers.FirstName,
+          task.Users_Task_CreatedByUserIDToUsers.LastName
+        )
+      } : null
+    }));
+
+    res.json(transformedTasks);
   } catch (error) {
-    console.error(error);
+    logger.error('Error fetching tasks', { userId, familyId: familyIdNumber, error });
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -218,16 +289,72 @@ export const getTasks = async (req: Request, res: Response) => {
 // Get task by ID
 export const getTaskById = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const userId = req.userId;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const taskId = parseInt(id);
+  if (isNaN(taskId)) {
+    return res.status(400).json({ error: 'Invalid task ID' });
+  }
+
   try {
+    // Verify user can access this task
+    const hasAccess = await verifyTaskAccess(userId, taskId);
+    if (!hasAccess) {
+      logger.warn('Unauthorized task access attempt', { userId, taskId });
+      return res.status(403).json({ error: 'Access denied. User cannot access this task.' });
+    }
+
     const task = await prisma.task.findUnique({
-      where: { TaskID: parseInt(id) },
+      where: { TaskID: taskId },
+      include: {
+        attachments: true,
+        Users_Task_AssignedToUserIDToUsers: {
+          select: {
+            UserID: true,
+            FirstName: true,
+            LastName: true,
+          },
+        },
+        Users_Task_CreatedByUserIDToUsers: {
+          select: {
+            UserID: true,
+            FirstName: true,
+            LastName: true,
+          },
+        },
+      },
     });
+    
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
-    res.json(task);
+
+    // Transform user data to include fullName for frontend compatibility
+    const transformedTask = {
+      ...task,
+      Users_Task_AssignedToUserIDToUsers: task.Users_Task_AssignedToUserIDToUsers ? {
+        ...task.Users_Task_AssignedToUserIDToUsers,
+        fullName: constructFullName(
+          task.Users_Task_AssignedToUserIDToUsers.FirstName,
+          task.Users_Task_AssignedToUserIDToUsers.LastName
+        )
+      } : null,
+      Users_Task_CreatedByUserIDToUsers: task.Users_Task_CreatedByUserIDToUsers ? {
+        ...task.Users_Task_CreatedByUserIDToUsers,
+        fullName: constructFullName(
+          task.Users_Task_CreatedByUserIDToUsers.FirstName,
+          task.Users_Task_CreatedByUserIDToUsers.LastName
+        )
+      } : null
+    };
+    
+    res.json(transformedTask);
   } catch (error) {
-    console.error(error);
+    logger.error('Error fetching task', { userId, taskId, error });
     res.status(500).json({ error: 'Internal server error' });
   }
 };

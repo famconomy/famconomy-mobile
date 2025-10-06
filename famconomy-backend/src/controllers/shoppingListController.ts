@@ -2,15 +2,34 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
 import { Prisma } from '@prisma/client';
+import { logger } from '../utils/logger';
+import { verifyFamilyMembership } from '../utils/authUtils';
 
 // Get all shopping lists for a family
 export const getShoppingLists = async (req: Request, res: Response) => {
   const { familyId } = req.params;
   const { filter } = req.query;
+  const userId = req.userId;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const familyIdNumber = parseInt(familyId);
+  if (!familyIdNumber || isNaN(familyIdNumber)) {
+    return res.status(400).json({ error: 'Invalid family ID' });
+  }
 
   try {
+    // Verify user belongs to the family
+    const isMember = await verifyFamilyMembership(userId, familyIdNumber);
+    if (!isMember) {
+      logger.warn('Unauthorized shopping list access attempt', { userId, familyId: familyIdNumber });
+      return res.status(403).json({ error: 'Access denied. User is not a member of this family.' });
+    }
+
     const shoppingLists = await prisma.shoppingList.findMany({
-      where: { FamilyID: parseInt(familyId) },
+      where: { FamilyID: familyIdNumber },
       include: { ShoppingItems: true },
     });
 
@@ -26,7 +45,7 @@ export const getShoppingLists = async (req: Request, res: Response) => {
 
     res.json(shoppingLists);
   } catch (error) {
-    console.error(error);
+    logger.error('Error fetching shopping lists', { userId, familyId: familyIdNumber, error });
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -146,26 +165,35 @@ export const addMealPlanToShoppingList = async (req: Request, res: Response) => 
     }
 
     // 2. Aggregate all ingredients
-    const aggregatedIngredients = new Map<string, { quantity: number; unit: string }>();
+    const aggregatedIngredients = new Map<string, { quantity: number; unit: string; originalName: string }>();
 
+    console.log(`--- DEBUG: Processing ${mealPlan.Entries.length} meal plan entries ---`);
+    
     for (const entry of mealPlan.Entries) {
       if (entry.Meal) {
+        console.log(`--- DEBUG: Processing meal "${entry.Meal.Title}" with ${entry.Meal.Ingredients.length} ingredients ---`);
         for (const ingredient of entry.Meal.Ingredients) {
-          // TODO: Implement scaling based on entry.Servings vs entry.Meal.DefaultServings
           const key = `${ingredient.Name.toLowerCase()}_${ingredient.Unit?.toLowerCase()}`;
           const existing = aggregatedIngredients.get(key);
+          
+          console.log(`--- DEBUG: Processing ingredient "${ingredient.Name}" (${ingredient.Quantity} ${ingredient.Unit}) ---`);
 
           if (existing) {
             existing.quantity += new Prisma.Decimal(ingredient.Quantity || 0).toNumber();
+            console.log(`--- DEBUG: Updated existing ingredient "${ingredient.Name}" to quantity ${existing.quantity} ---`);
           } else {
             aggregatedIngredients.set(key, {
               quantity: new Prisma.Decimal(ingredient.Quantity || 0).toNumber(),
               unit: ingredient.Unit || '',
+              originalName: ingredient.Name,
             });
+            console.log(`--- DEBUG: Added new ingredient "${ingredient.Name}" with quantity ${ingredient.Quantity} ---`);
           }
         }
       }
     }
+
+    console.log(`--- DEBUG: Total aggregated ingredients: ${aggregatedIngredients.size} ---`);
 
     if (aggregatedIngredients.size === 0) {
       return res.status(400).json({ error: 'The meals in this plan have no ingredients.' });
@@ -181,21 +209,25 @@ export const addMealPlanToShoppingList = async (req: Request, res: Response) => 
       return res.status(404).json({ error: 'Shopping list not found or does not belong to the family.' });
     }
 
+    console.log(`--- DEBUG: Starting transaction to add ${aggregatedIngredients.size} ingredients to shopping list ${shoppingListId} ---`);
+    
     // 4. Upsert items into the shopping list
     await prisma.$transaction(async (tx) => {
       for (const [key, item] of aggregatedIngredients.entries()) {
-        const name = key.split('_')[0];
+        const name = item.originalName; // Use the original cased name
         const existingItem = shoppingList.ShoppingItems.find(
-          (sli) => sli.Name.toLowerCase() === name && sli.Unit?.toLowerCase() === item.unit.toLowerCase()
+          (sli) => sli.Name.toLowerCase() === name.toLowerCase() && sli.Unit?.toLowerCase() === item.unit.toLowerCase()
         );
 
         if (existingItem) {
+          console.log(`--- DEBUG: Updating existing item "${existingItem.Name}" from ${existingItem.Quantity} to ${existingItem.Quantity + item.quantity} ---`);
           // Update quantity of existing item
           await tx.shoppingItem.update({
             where: { ShoppingItemID: existingItem.ShoppingItemID },
             data: { Quantity: { increment: item.quantity } },
           });
         } else {
+          console.log(`--- DEBUG: Creating new item "${name}" with quantity ${item.quantity} ${item.unit} ---`);
           // Create new item
           await tx.shoppingItem.create({
             data: {
@@ -209,6 +241,8 @@ export const addMealPlanToShoppingList = async (req: Request, res: Response) => 
         }
       }
     });
+
+    console.log(`--- DEBUG: Transaction completed successfully ---`);
 
     // 5. Return the updated shopping list
     const updatedList = await prisma.shoppingList.findUnique({

@@ -741,6 +741,7 @@ enum MealSlot {
 model Meal {
   MealID          Int              @id @default(autoincrement())
   FamilyID        Int
+  RecipeID        Int?             // Optional link to Recipe
   Title           String           @db.VarChar(150)
   Description     String?          @db.VarChar(1000)
   Instructions    String?          @db.Text
@@ -752,6 +753,7 @@ model Meal {
   UpdatedAt       DateTime         @updatedAt
   Family          Family           @relation(fields: [FamilyID], references: [FamilyID])
   CreatedBy       Users            @relation(fields: [CreatedByUserID], references: [UserID])
+  Recipe          Recipe?          @relation(fields: [RecipeID], references: [RecipeID])
   Ingredients     MealIngredient[]
   Tags            MealTag[]
   PlanEntries     MealPlanEntry[]
@@ -759,6 +761,7 @@ model Meal {
   @@index([FamilyID])
   @@index([CreatedByUserID])
   @@index([Status])
+  @@index([RecipeID])
 }
 
 model MealIngredient {
@@ -844,6 +847,7 @@ model Recipe {
   Steps            RecipeStep[]
   Memories         RecipeMemory[]
   Favorites        RecipeFavorite[]
+  Meals            Meal[]            // Meals that reference this recipe
 
   @@index([FamilyID])
   @@index([CreatedByUserID])

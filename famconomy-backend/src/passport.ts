@@ -4,10 +4,8 @@ import { Strategy as FacebookStrategy } from 'passport-facebook';
 import { Strategy as AppleStrategy } from 'passport-apple';
 import { Strategy as MicrosoftStrategy } from 'passport-microsoft';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './db';
 import 'dotenv/config';
-
-const prisma = new PrismaClient();
 
 // Google Strategy
 passport.use(new GoogleStrategy({

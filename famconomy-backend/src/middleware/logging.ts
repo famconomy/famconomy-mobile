@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
 
 export const loggingMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const quietPrefixes = ['/notifications'];
@@ -7,11 +8,13 @@ export const loggingMiddleware = (req: Request, res: Response, next: NextFunctio
     return next();
   }
 
-  console.log('--- NEW REQUEST ---');
-  console.log('Time:', new Date().toISOString());
-  console.log('Method:', req.method);
-  console.log('URL:', req.originalUrl);
-  console.log('Body:', req.body);
-  console.log('--- END REQUEST ---');
+  logger.info('Incoming request', {
+    method: req.method,
+    url: req.originalUrl,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip,
+    body: req.body // This will be sanitized automatically
+  });
+
   next();
 };

@@ -79,15 +79,18 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'supersecret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 1 day
-  }
-}));
+// Validate required environment variables
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
+
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET environment variable is required in production');
+}
+
+// Import session configuration
+import { sessionConfig } from './config/session';
+app.use(session(sessionConfig));
 
 app.use(passport.initialize());
 app.use(passport.session());
