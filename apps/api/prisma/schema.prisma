@@ -1,0 +1,1337 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model AccessLevel {
+  AccessLevelID    Int                @id @default(autoincrement())
+  LevelName        String             @db.VarChar(20)
+  ModulePermission ModulePermission[]
+}
+
+model ApprovalStatus {
+  ApprovalStatusID Int              @id @default(autoincrement())
+  StatusName       String           @db.VarChar(20)
+  CalendarEvents   CalendarEvents[]
+  Task             Task[]
+}
+
+enum WishListVisibility {
+  FAMILY
+  PARENTS
+  LINK
+}
+
+enum WishListItemStatus {
+  IDEA
+  RESERVED
+  PURCHASED
+}
+
+enum ProfileVisibility {
+  FAMILY
+  PARENTS
+  LINK
+  PRIVATE
+}
+
+enum GuidelineType {
+  VALUE
+  RULE
+}
+
+enum GuidelineStatus {
+  DRAFT
+  UNDER_REVIEW
+  ACTIVE
+  RETIRED
+}
+
+enum RecipeVisibility {
+  FAMILY
+  LINK
+}
+
+enum WalletLedgerStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum WalletLedgerType {
+  FUNDING
+  TASK_REWARD
+  GIG_REWARD
+  TRANSFER
+  WITHDRAWAL
+  ADJUSTMENT
+}
+
+enum WalletEntryDirection {
+  DEBIT
+  CREDIT
+}
+
+enum WalletEntryAccountType {
+  FAMILY
+  USER
+  EXTERNAL
+}
+
+model Budget {
+  BudgetID        Int           @id @default(autoincrement())
+  FamilyID        Int
+  Name            String        @db.VarChar(100)
+  TotalAmount     Decimal       @db.Decimal(10, 2)
+  StartDate       DateTime?     @db.Date
+  EndDate         DateTime?     @db.Date
+  CreatedByUserID String        @db.VarChar(36)
+  Family          Family        @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "Budget_ibfk_1")
+  Users           Users         @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Budget_ibfk_2")
+  Transaction     Transaction[]
+
+  @@unique([FamilyID, Name])
+  @@index([FamilyID], map: "FamilyID")
+}
+
+model CalendarEvents {
+  EventID                                      Int              @id @default(autoincrement())
+  FamilyID                                     Int
+  Title                                        String           @db.VarChar(100)
+  Description                                  String?          @db.Text
+  StartTime                                    DateTime         @db.DateTime(0)
+  EndTime                                      DateTime         @db.DateTime(0)
+  CreatedByUserID                              String           @db.VarChar(36)
+  IsSuggested                                  Boolean?         @default(false)
+  ApprovalStatusID                             Int
+  ApprovedByUserID                             String?          @db.VarChar(36)
+  IsRecurring                                  Boolean?         @default(false)
+  RecurrencePattern                            String?          @db.VarChar(255)
+  RecurrenceExceptionDates                     String?          @db.Text
+  RecurrenceParentID                           Int?
+  RecurrenceOriginalStart                      DateTime?        @db.DateTime(0)
+  RecurrenceOriginalEnd                        DateTime?        @db.DateTime(0)
+  ReminderTime                                 DateTime?        @db.DateTime(0)
+  Family                                       Family           @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "CalendarEvents_ibfk_1")
+  Users_CalendarEvents_CreatedByUserIDToUsers  Users            @relation("CalendarEvents_CreatedByUserIDToUsers", fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "CalendarEvents_ibfk_2")
+  Users_CalendarEvents_ApprovedByUserIDToUsers Users?           @relation("CalendarEvents_ApprovedByUserIDToUsers", fields: [ApprovedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "CalendarEvents_ibfk_3")
+  ApprovalStatus                               ApprovalStatus   @relation(fields: [ApprovalStatusID], references: [ApprovalStatusID], onDelete: NoAction, onUpdate: NoAction, map: "CalendarEvents_ibfk_4")
+  ParentEvent                                  CalendarEvents?  @relation("CalendarEventExceptions", fields: [RecurrenceParentID], references: [EventID])
+  ExceptionOverrides                           CalendarEvents[] @relation("CalendarEventExceptions")
+
+  @@index([ApprovalStatusID], map: "ApprovalStatusID")
+  @@index([ApprovedByUserID], map: "ApprovedByUserID")
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([FamilyID], map: "FamilyID")
+  @@index([RecurrenceParentID], map: "RecurrenceParentID")
+}
+
+model Family {
+  FamilyID              Int                   @id @default(autoincrement())
+  FamilyName            String                @db.VarChar(50)
+  FamilyCrestUrl        String?               @db.VarChar(100)
+  FamilyMantra          String?               @db.VarChar(1000)
+  FamilyValues          String?               @db.Text
+  rewardMode            RewardMode            @default(points)
+  CreatedByUserID       String                @db.VarChar(36)
+  CreatedDate           DateTime              @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  UpdatedDate           DateTime              @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  Budget                Budget[]
+  CalendarEvents        CalendarEvents[]
+  Users                 Users                 @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Family_ibfk_1")
+  FamilyRule            FamilyRule[]
+  FamilyUsers           FamilyUsers[]
+  JournalEntry          JournalEntry[]
+  Message               Message[]
+  ModulePermission      ModulePermission[]
+  PhotoAlbum            PhotoAlbum[]
+  Task                  Task[]
+  TransactionCategory   TransactionCategory[]
+  ShoppingList          ShoppingList[]
+  SavingsGoal           SavingsGoal[]
+  Invitation            Invitation[]
+  LinZMemory            LinZMemory[]
+  FamilyRoom            FamilyRoom[]
+  FamilyGigs            FamilyGig[]
+  FamilySetting         FamilySetting?
+  plaidItems            PlaidItem[]
+  LinZConversations     LinZConversation[]
+  LinZFacts             LinZFacts[]
+  ConversationSummaries ConversationSummary[]
+  MemberProfile         MemberProfile[]
+  WishList              WishList[]
+  FamilyGuideline       FamilyGuideline[]
+  familyWallet          FamilyWallet?
+  userWallets           UserWallet[]
+  walletLedgers         WalletLedger[]
+  Meal                  Meal[]
+  MealPlanWeek          MealPlanWeek[]
+  Recipe                Recipe[]
+  RecipeMemory          RecipeMemory[]
+
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+}
+
+model FamilyRule {
+  RuleID          Int      @id @default(autoincrement())
+  FamilyID        Int
+  RuleTitle       String   @db.VarChar(50)
+  RuleDescription String?  @db.VarChar(100)
+  CreatedByUserID String   @db.VarChar(36)
+  CreatedDate     DateTime @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  Users           Users    @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "FamilyRule_ibfk_1")
+  Family          Family   @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "FamilyRule_ibfk_2")
+
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([FamilyID], map: "FamilyID")
+}
+
+model FamilyUsers {
+  UserID         String       @db.VarChar(36)
+  FamilyID       Int
+  RelationshipID Int
+  Users          Users        @relation(fields: [UserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "FamilyUsers_ibfk_1")
+  Family         Family       @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "FamilyUsers_ibfk_2")
+  Relationship   Relationship @relation(fields: [RelationshipID], references: [RelationshipID], onDelete: NoAction, onUpdate: NoAction, map: "FamilyUsers_ibfk_3")
+
+  @@id([UserID, FamilyID])
+  @@index([FamilyID], map: "FamilyID")
+  @@index([RelationshipID], map: "RelationshipID")
+}
+
+model MemberProfile {
+  ProfileID           Int               @id @default(autoincrement())
+  UserID              String            @db.VarChar(36)
+  FamilyID            Int
+  ClothingSizes       Json?
+  FavoriteColors      Json?
+  FavoriteFoods       Json?
+  Interests           Json?
+  Allergies           Json?
+  FavoriteBrands      Json?
+  Notes               String?           @db.Text
+  WishlistSummary     String?           @db.Text
+  Visibility          ProfileVisibility @default(FAMILY)
+  ShareToken          String?           @unique
+  ShareTokenExpiresAt DateTime?         @db.DateTime(0)
+  LastUpdatedBy       String?           @db.VarChar(36)
+  LastUpdatedAt       DateTime?         @db.DateTime(0)
+  CreatedAt           DateTime          @default(now())
+  UpdatedAt           DateTime          @updatedAt
+  user                Users             @relation(fields: [UserID], references: [UserID], onDelete: Cascade)
+  family              Family            @relation(fields: [FamilyID], references: [FamilyID], onDelete: Cascade)
+  lastUpdatedByUser   Users?            @relation("MemberProfileUpdatedBy", fields: [LastUpdatedBy], references: [UserID])
+
+  @@unique([UserID, FamilyID])
+  @@index([FamilyID])
+}
+
+model JournalComment {
+  CommentID       Int          @id @default(autoincrement())
+  EntryID         Int
+  CommentText     String?      @db.Text
+  CreatedByUserID String?      @db.VarChar(36)
+  CreatedAt       DateTime?    @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  JournalEntry    JournalEntry @relation(fields: [EntryID], references: [EntryID], onDelete: NoAction, onUpdate: NoAction, map: "JournalComment_ibfk_1")
+  Users           Users?       @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "JournalComment_ibfk_2")
+
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([EntryID], map: "EntryID")
+}
+
+model JournalEntry {
+  EntryID         Int              @id @default(autoincrement())
+  FamilyID        Int
+  Title           String?          @db.VarChar(100)
+  EntryText       String?          @db.Text
+  IsPrivate       Boolean?         @default(false)
+  CreatedByUserID String           @db.VarChar(36)
+  CreatedAt       DateTime         @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  JournalComment  JournalComment[]
+  Family          Family           @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "JournalEntry_ibfk_1")
+  Users           Users            @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "JournalEntry_ibfk_2")
+  JournalTag      JournalTag[]
+
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([FamilyID], map: "FamilyID")
+}
+
+model JournalTag {
+  TagID        Int          @id @default(autoincrement())
+  EntryID      Int
+  TagName      String?      @db.VarChar(50)
+  JournalEntry JournalEntry @relation(fields: [EntryID], references: [EntryID], onDelete: NoAction, onUpdate: NoAction, map: "JournalTag_ibfk_1")
+
+  @@index([EntryID], map: "EntryID")
+}
+
+model LinkedAccountProvider {
+  ProviderID   Int           @id @default(autoincrement())
+  ProviderName String        @db.VarChar(20)
+  Transaction  Transaction[]
+}
+
+model Message {
+  MessageID        Int           @id @default(autoincrement())
+  FamilyID         Int
+  SourceID         Int
+  SenderID         String        @db.VarChar(36)
+  ExternalThreadID String?       @db.VarChar(100)
+  SenderName       String?       @db.VarChar(100)
+  Timestamp        DateTime      @db.DateTime(0)
+  MessageText      String?       @db.Text
+  AiNotes          String?       @db.Text
+  Family           Family        @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "Message_ibfk_1")
+  MessageSource    MessageSource @relation(fields: [SourceID], references: [SourceID], onDelete: NoAction, onUpdate: NoAction, map: "Message_ibfk_2")
+  Sender           Users         @relation(fields: [SenderID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Message_ibfk_3")
+
+  @@index([FamilyID], map: "FamilyID")
+  @@index([SourceID], map: "SourceID")
+}
+
+model MessageSource {
+  SourceID   Int       @id @default(autoincrement())
+  SourceName String    @db.VarChar(20)
+  Message    Message[]
+}
+
+model WishList {
+  WishListID          Int                @id @default(autoincrement())
+  FamilyID            Int
+  OwnerUserID         String?            @db.VarChar(36)
+  Title               String             @db.VarChar(150)
+  Description         String?            @db.VarChar(500)
+  Visibility          WishListVisibility @default(FAMILY)
+  ShareToken          String?            @unique
+  ShareTokenExpiresAt DateTime?          @db.DateTime(0)
+  CreatedByUserID     String             @db.VarChar(36)
+  UpdatedByUserID     String?            @db.VarChar(36)
+  CreatedAt           DateTime           @default(now())
+  UpdatedAt           DateTime           @updatedAt
+  family              Family             @relation(fields: [FamilyID], references: [FamilyID], onDelete: Cascade)
+  owner               Users?             @relation("WishListOwner", fields: [OwnerUserID], references: [UserID])
+  createdBy           Users              @relation("WishListCreatedBy", fields: [CreatedByUserID], references: [UserID])
+  updatedBy           Users?             @relation("WishListUpdatedBy", fields: [UpdatedByUserID], references: [UserID])
+  items               WishListItem[]
+
+  @@index([FamilyID])
+  @@index([OwnerUserID])
+}
+
+model WishListItem {
+  WishListItemID  Int                @id @default(autoincrement())
+  WishListID      Int
+  Name            String             @db.VarChar(200)
+  Details         String?            @db.Text
+  TargetUrl       String?            @db.VarChar(500)
+  ImageUrl        String?            @db.VarChar(500)
+  PriceMin        Decimal?           @db.Decimal(10, 2)
+  PriceMax        Decimal?           @db.Decimal(10, 2)
+  Priority        Int?
+  Status          WishListItemStatus @default(IDEA)
+  ClaimedByUserID String?            @db.VarChar(36)
+  ClaimedNote     String?            @db.VarChar(500)
+  ClaimedAt       DateTime?          @db.DateTime(0)
+  CreatedByUserID String             @db.VarChar(36)
+  UpdatedByUserID String?            @db.VarChar(36)
+  CreatedAt       DateTime           @default(now())
+  UpdatedAt       DateTime           @updatedAt
+  wishlist        WishList           @relation(fields: [WishListID], references: [WishListID], onDelete: Cascade)
+  claimedBy       Users?             @relation("WishListItemClaimedBy", fields: [ClaimedByUserID], references: [UserID])
+  createdBy       Users              @relation("WishListItemCreatedBy", fields: [CreatedByUserID], references: [UserID])
+  updatedBy       Users?             @relation("WishListItemUpdatedBy", fields: [UpdatedByUserID], references: [UserID])
+
+  @@index([WishListID])
+  @@index([ClaimedByUserID])
+}
+
+model FamilyGuideline {
+  GuidelineID      Int             @id @default(autoincrement())
+  FamilyID         Int
+  Type             GuidelineType
+  Title            String          @db.VarChar(255)
+  Description      String?         @db.Text
+  ParentID         Int?
+  Status           GuidelineStatus @default(UNDER_REVIEW)
+  ProposedByUserID String          @db.VarChar(36)
+  ProposedAt       DateTime        @default(now())
+  ActivatedAt      DateTime?
+  ExpiresAt        DateTime?       @db.DateTime(0)
+  Metadata         Json?
+
+  family     Family              @relation(fields: [FamilyID], references: [FamilyID], onDelete: Cascade)
+  proposedBy Users               @relation("FamilyGuideline_proposedBy", fields: [ProposedByUserID], references: [UserID], onDelete: Cascade)
+  parent     FamilyGuideline?    @relation("GuidelineHierarchy", fields: [ParentID], references: [GuidelineID])
+  children   FamilyGuideline[]   @relation("GuidelineHierarchy")
+  approvals  GuidelineApproval[]
+
+  @@index([FamilyID])
+  @@index([Type, Status])
+  @@index([ParentID])
+}
+
+model GuidelineApproval {
+  GuidelineID Int
+  UserID      String    @db.VarChar(36)
+  Approved    Boolean   @default(false)
+  ApprovedAt  DateTime? @db.DateTime(0)
+
+  guideline FamilyGuideline @relation(fields: [GuidelineID], references: [GuidelineID], onDelete: Cascade)
+  user      Users           @relation(fields: [UserID], references: [UserID], onDelete: Cascade)
+
+  @@id([GuidelineID, UserID])
+  @@index([UserID])
+}
+
+model ModuleName {
+  ModuleID         Int                @id @default(autoincrement())
+  ModuleName       String             @db.VarChar(20)
+  ModulePermission ModulePermission[]
+}
+
+model ModulePermission {
+  PermissionID  Int         @id @default(autoincrement())
+  UserID        String      @db.VarChar(36)
+  FamilyID      Int
+  ModuleID      Int
+  AccessLevelID Int
+  Users         Users       @relation(fields: [UserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "ModulePermission_ibfk_1")
+  Family        Family      @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "ModulePermission_ibfk_2")
+  ModuleName    ModuleName  @relation(fields: [ModuleID], references: [ModuleID], onDelete: NoAction, onUpdate: NoAction, map: "ModulePermission_ibfk_3")
+  AccessLevel   AccessLevel @relation(fields: [AccessLevelID], references: [AccessLevelID], onDelete: NoAction, onUpdate: NoAction, map: "ModulePermission_ibfk_4")
+
+  @@index([AccessLevelID], map: "AccessLevelID")
+  @@index([FamilyID], map: "FamilyID")
+  @@index([ModuleID], map: "ModuleID")
+  @@index([UserID], map: "UserID")
+}
+
+model Permission {
+  PermissionID   Int              @id
+  PermissionName String           @db.VarChar(25)
+  UserPermission UserPermission[]
+}
+
+model Photo {
+  PhotoID          Int        @id @default(autoincrement())
+  AlbumID          Int
+  PhotoUrl         String     @db.VarChar(255)
+  UploadedByUserID String?    @db.VarChar(36)
+  UploadedAt       DateTime?  @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  PhotoAlbum       PhotoAlbum @relation(fields: [AlbumID], references: [AlbumID], onDelete: NoAction, onUpdate: NoAction, map: "Photo_ibfk_1")
+  Users            Users?     @relation(fields: [UploadedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Photo_ibfk_2")
+
+  @@index([AlbumID], map: "AlbumID")
+  @@index([UploadedByUserID], map: "UploadedByUserID")
+}
+
+model PhotoAlbum {
+  AlbumID         Int      @id @default(autoincrement())
+  FamilyID        Int
+  Title           String?  @db.VarChar(100)
+  Description     String?  @db.Text
+  CreatedByUserID String   @db.VarChar(36)
+  CreatedAt       DateTime @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  Photo           Photo[]
+  Family          Family   @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "PhotoAlbum_ibfk_1")
+  Users           Users    @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "PhotoAlbum_ibfk_2")
+
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([FamilyID], map: "FamilyID")
+}
+
+model Relationship {
+  RelationshipID   Int           @id
+  RelationshipName String        @db.VarChar(50)
+  FamilyUsers      FamilyUsers[]
+  Invitation       Invitation[]
+}
+
+model Role {
+  RoleID   Int        @id
+  RoleName String     @db.VarChar(25)
+  UserRole UserRole[]
+}
+
+model Task {
+  TaskID                               Int              @id @default(autoincrement())
+  FamilyID                             Int
+  Title                                String           @db.VarChar(100)
+  Description                          String?          @db.Text
+  DueDate                              DateTime?        @db.DateTime(0)
+  AssignedToUserID                     String?          @db.VarChar(36)
+  CreatedByUserID                      String           @db.VarChar(36)
+  TaskStatusID                         Int
+  IsCustom                             Boolean?         @default(false)
+  SuggestedByChildID                   String?          @db.VarChar(36)
+  ApprovalStatusID                     Int
+  ApprovedByUserID                     String?          @db.VarChar(36)
+  RewardType                           RewardType?
+  RewardValue                          Decimal?         @db.Decimal(10, 2)
+  Family                               Family           @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_1")
+  Users_Task_AssignedToUserIDToUsers   Users?           @relation("Task_AssignedToUserIDToUsers", fields: [AssignedToUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_2")
+  Users_Task_CreatedByUserIDToUsers    Users            @relation("Task_CreatedByUserIDToUsers", fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_3")
+  Users_Task_SuggestedByChildIDToUsers Users?           @relation("Task_SuggestedByChildIDToUsers", fields: [SuggestedByChildID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_4")
+  Users_Task_ApprovedByUserIDToUsers   Users?           @relation("Task_ApprovedByUserIDToUsers", fields: [ApprovedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_5")
+  TaskStatus                           TaskStatus       @relation(fields: [TaskStatusID], references: [TaskStatusID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_6")
+  ApprovalStatus                       ApprovalStatus   @relation(fields: [ApprovalStatusID], references: [ApprovalStatusID], onDelete: NoAction, onUpdate: NoAction, map: "Task_ibfk_7")
+  attachments                          TaskAttachment[]
+  rewardLedgerId                       Int?
+  rewardLedger                         WalletLedger?    @relation(fields: [rewardLedgerId], references: [id])
+
+  @@index([ApprovalStatusID], map: "ApprovalStatusID")
+  @@index([ApprovedByUserID], map: "ApprovedByUserID")
+  @@index([AssignedToUserID], map: "AssignedToUserID")
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([FamilyID], map: "FamilyID")
+  @@index([SuggestedByChildID], map: "SuggestedByChildID")
+  @@index([TaskStatusID], map: "TaskStatusID")
+  @@index([rewardLedgerId])
+}
+
+model TaskAttachment {
+  AttachmentID Int    @id @default(autoincrement())
+  TaskID       Int
+  Url          String @db.VarChar(255)
+  FileName     String @db.VarChar(255)
+  FileType     String @db.VarChar(50)
+  FileSize     Int
+  Task         Task   @relation(fields: [TaskID], references: [TaskID], onDelete: Cascade)
+
+  @@index([TaskID])
+}
+
+model TaskStatus {
+  TaskStatusID Int    @id @default(autoincrement())
+  StatusName   String @db.VarChar(20)
+  Task         Task[]
+}
+
+model Transaction {
+  TransactionID         Int                    @id @default(autoincrement())
+  BudgetID              Int?
+  Amount                Decimal                @db.Decimal(10, 2)
+  CategoryID            Int?
+  Description           String?                @db.Text
+  Date                  DateTime?              @db.DateTime(0)
+  ProviderID            Int?
+  CreatedByUserID       String                 @db.VarChar(36)
+  plaidAccountId        String?                @db.VarChar(255)
+  Budget                Budget?                @relation(fields: [BudgetID], references: [BudgetID], onDelete: NoAction, onUpdate: NoAction, map: "Transaction_ibfk_1")
+  TransactionCategory   TransactionCategory?   @relation(fields: [CategoryID], references: [CategoryID], onDelete: NoAction, onUpdate: NoAction, map: "Transaction_ibfk_2")
+  Users                 Users                  @relation(fields: [CreatedByUserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Transaction_ibfk_3")
+  LinkedAccountProvider LinkedAccountProvider? @relation(fields: [ProviderID], references: [ProviderID], onDelete: NoAction, onUpdate: NoAction, map: "Transaction_ibfk_4")
+  account               PlaidAccount?          @relation(fields: [plaidAccountId], references: [id])
+
+  @@index([BudgetID], map: "BudgetID")
+  @@index([CategoryID], map: "CategoryID")
+  @@index([CreatedByUserID], map: "CreatedByUserID")
+  @@index([ProviderID], map: "ProviderID")
+  @@index([plaidAccountId])
+}
+
+model TransactionCategory {
+  CategoryID  Int           @id @default(autoincrement())
+  FamilyID    Int?
+  Name        String        @db.VarChar(50)
+  IsDefault   Boolean?      @default(false)
+  Transaction Transaction[]
+  Family      Family?       @relation(fields: [FamilyID], references: [FamilyID], onDelete: NoAction, onUpdate: NoAction, map: "TransactionCategory_ibfk_1")
+
+  @@index([FamilyID], map: "FamilyID")
+}
+
+model UserPermission {
+  UserID       String     @db.VarChar(36)
+  PermissionID Int
+  Users        Users      @relation(fields: [UserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "UserPermission_ibfk_1")
+  Permission   Permission @relation(fields: [PermissionID], references: [PermissionID], onDelete: NoAction, onUpdate: NoAction, map: "UserPermission_ibfk_2")
+
+  @@id([UserID, PermissionID])
+  @@index([PermissionID], map: "PermissionID")
+}
+
+model UserRole {
+  UserID String @db.VarChar(36)
+  RoleID Int
+  Users  Users  @relation(fields: [UserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "UserRole_ibfk_1")
+  Role   Role   @relation(fields: [RoleID], references: [RoleID], onDelete: NoAction, onUpdate: NoAction, map: "UserRole_ibfk_2")
+
+  @@id([UserID, RoleID])
+  @@index([RoleID], map: "RoleID")
+}
+
+model Users {
+  UserID                                                String                @id @default(dbgenerated("(uuid())")) @db.VarChar(36)
+  FirstName                                             String                @db.VarChar(50)
+  LastName                                              String                @db.VarChar(50)
+  Email                                                 String                @unique(map: "Email") @db.VarChar(50)
+  PasswordHash                                          String?               @db.VarChar(255)
+  ProfilePhotoUrl                                       String?               @db.VarChar(100)
+  BirthDate                                             DateTime?             @db.Date
+  PhoneNumber                                           String?               @db.VarChar(15)
+  PermissionsOverride                                   Boolean               @default(false)
+  IsDeleted                                             Boolean               @default(false)
+  CreatedDate                                           DateTime              @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  UpdatedDate                                           DateTime              @default(dbgenerated("(curdate())")) @db.DateTime(0)
+  Budget                                                Budget[]
+  CalendarEvents_CalendarEvents_CreatedByUserIDToUsers  CalendarEvents[]      @relation("CalendarEvents_CreatedByUserIDToUsers")
+  CalendarEvents_CalendarEvents_ApprovedByUserIDToUsers CalendarEvents[]      @relation("CalendarEvents_ApprovedByUserIDToUsers")
+  Family                                                Family[]
+  FamilyRule                                            FamilyRule[]
+  FamilyUsers                                           FamilyUsers[]
+  JournalComment                                        JournalComment[]
+  JournalEntry                                          JournalEntry[]
+  ModulePermission                                      ModulePermission[]
+  Photo                                                 Photo[]
+  PhotoAlbum                                            PhotoAlbum[]
+  Task_Task_AssignedToUserIDToUsers                     Task[]                @relation("Task_AssignedToUserIDToUsers")
+  Task_Task_CreatedByUserIDToUsers                      Task[]                @relation("Task_CreatedByUserIDToUsers")
+  Task_Task_SuggestedByChildIDToUsers                   Task[]                @relation("Task_SuggestedByChildIDToUsers")
+  Task_Task_ApprovedByUserIDToUsers                     Task[]                @relation("Task_ApprovedByUserIDToUsers")
+  Transaction                                           Transaction[]
+  UserPermission                                        UserPermission[]
+  UserRole                                              UserRole[]
+  Notification                                          Notification[]
+  ShoppingList                                          ShoppingList[]
+  ShoppingItem                                          ShoppingItem[]
+  SavingsGoal                                           SavingsGoal[]
+  Invitation                                            Invitation[]
+  Message                                               Message[]
+  googleAccessToken                                     String?               @db.Text
+  googleRefreshToken                                    String?               @db.Text
+  facebookAccessToken                                   String?               @db.Text
+  facebookRefreshToken                                  String?               @db.Text
+  appleAccessToken                                      String?               @db.Text
+  appleRefreshToken                                     String?               @db.Text
+  microsoftAccessToken                                  String?               @db.Text
+  microsoftRefreshToken                                 String?               @db.Text
+  plaidItemId                                           String?               @db.VarChar(255)
+  PushSubscription                                      PushSubscription[]
+  LinZMemory                                            LinZMemory[]
+  Claim                                                 Claim[]
+  RewardLedger                                          RewardLedger[]
+  PlaidItem                                             PlaidItem[]
+  LinZConversations                                     LinZConversation[]
+  LinZFacts                                             LinZFacts[]
+  ConversationSummaries                                 ConversationSummary[]
+  AuditLogs                                             AuditLog[]
+  integrations                                          Integration[]
+  MemberProfile                                         MemberProfile[]
+  wishlistsOwned                                        WishList[]            @relation("WishListOwner")
+  wishlistsCreated                                      WishList[]            @relation("WishListCreatedBy")
+  wishlistsUpdated                                      WishList[]            @relation("WishListUpdatedBy")
+  wishListItemsClaimed                                  WishListItem[]        @relation("WishListItemClaimedBy")
+  wishListItemsCreated                                  WishListItem[]        @relation("WishListItemCreatedBy")
+  wishListItemsUpdated                                  WishListItem[]        @relation("WishListItemUpdatedBy")
+  memberProfilesUpdated                                 MemberProfile[]       @relation("MemberProfileUpdatedBy")
+  guidelinesProposed                                    FamilyGuideline[]     @relation("FamilyGuideline_proposedBy")
+  guidelineApprovals                                    GuidelineApproval[]
+  userWallets                                           UserWallet[]
+  initiatedWalletLedgers                                WalletLedger[]        @relation("WalletLedgerInitiatedBy")
+
+  Meal          Meal[]
+  MealPlanEntry MealPlanEntry[]
+  Recipe        Recipe[]
+  RecipeMemory  RecipeMemory[]
+  RecipeFavorite RecipeFavorite[]
+}
+
+model PlaidItem {
+  id          String         @id @default(cuid())
+  userId      String?        @db.VarChar(36)
+  familyId    Int?
+  accessToken String
+  itemId      String         @unique
+  user        Users?         @relation(fields: [userId], references: [UserID])
+  family      Family?        @relation(fields: [familyId], references: [FamilyID])
+  accounts    PlaidAccount[]
+}
+
+model PlaidAccount {
+  id           String        @id @default(cuid())
+  itemId       String
+  name         String
+  customName   String?
+  mask         String
+  type         String
+  subtype      String
+  item         PlaidItem     @relation(fields: [itemId], references: [itemId])
+  transactions Transaction[]
+}
+
+model Notification {
+  NotificationID Int      @id @default(autoincrement())
+  UserID         String   @db.VarChar(36)
+  Message        String   @db.VarChar(255)
+  IsRead         Boolean  @default(false)
+  CreatedAt      DateTime @default(now())
+  Type           String?
+  Link           String?
+  Users          Users    @relation(fields: [UserID], references: [UserID], onDelete: NoAction, onUpdate: NoAction, map: "Notification_ibfk_1")
+
+  @@index([UserID], map: "UserID")
+}
+
+model ShoppingList {
+  ShoppingListID  Int            @id @default(autoincrement())
+  FamilyID        Int
+  Name            String         @db.VarChar(100)
+  CreatedByUserID String         @db.VarChar(36)
+  CreatedAt       DateTime       @default(now())
+  Archived        Boolean        @default(false)
+  Family          Family         @relation(fields: [FamilyID], references: [FamilyID])
+  Users           Users          @relation(fields: [CreatedByUserID], references: [UserID])
+  ShoppingItems   ShoppingItem[]
+}
+
+model ShoppingItem {
+  ShoppingItemID Int               @id @default(autoincrement())
+  ShoppingListID Int
+  Name           String            @db.VarChar(100)
+  Quantity       Int
+  Unit           String?           @db.VarChar(50)
+  Completed      Boolean           @default(false)
+  AddedByUserID  String            @db.VarChar(36)
+  AddedAt        DateTime          @default(now())
+  CategoryID     Int?
+  ShoppingList   ShoppingList      @relation(fields: [ShoppingListID], references: [ShoppingListID])
+  Users          Users             @relation(fields: [AddedByUserID], references: [UserID])
+  Category       ShoppingCategory? @relation(fields: [CategoryID], references: [CategoryID])
+}
+
+model ShoppingCategory {
+  CategoryID   Int            @id @default(autoincrement())
+  Name         String         @db.VarChar(100)
+  ShoppingItem ShoppingItem[]
+}
+
+model ShoppingListTemplate {
+  TemplateID Int                        @id @default(autoincrement())
+  Name       String                     @db.VarChar(100)
+  Items      ShoppingListTemplateItem[]
+}
+
+model ShoppingListTemplateItem {
+  TemplateItemID Int                  @id @default(autoincrement())
+  TemplateID     Int
+  Name           String               @db.VarChar(100)
+  Quantity       Int
+  Unit           String?              @db.VarChar(50)
+  Template       ShoppingListTemplate @relation(fields: [TemplateID], references: [TemplateID])
+}
+
+enum MealStatus {
+  SUGGESTED
+  APPROVED
+  ARCHIVED
+}
+
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+model Meal {
+  MealID          Int              @id @default(autoincrement())
+  FamilyID        Int
+  RecipeID        Int?             // Optional link to Recipe
+  Title           String           @db.VarChar(150)
+  Description     String?          @db.VarChar(1000)
+  Instructions    String?          @db.Text
+  Status          MealStatus       @default(SUGGESTED)
+  IsFavorite      Boolean          @default(false)
+  DefaultServings Int              @default(4)
+  CreatedByUserID String           @db.VarChar(36)
+  CreatedAt       DateTime         @default(now())
+  UpdatedAt       DateTime         @updatedAt
+  Family          Family           @relation(fields: [FamilyID], references: [FamilyID])
+  CreatedBy       Users            @relation(fields: [CreatedByUserID], references: [UserID])
+  Recipe          Recipe?          @relation(fields: [RecipeID], references: [RecipeID])
+  Ingredients     MealIngredient[]
+  Tags            MealTag[]
+  PlanEntries     MealPlanEntry[]
+
+  @@index([FamilyID])
+  @@index([CreatedByUserID])
+  @@index([Status])
+  @@index([RecipeID])
+}
+
+model MealIngredient {
+  MealIngredientID Int      @id @default(autoincrement())
+  MealID           Int
+  Name             String   @db.VarChar(150)
+  Quantity         Decimal? @db.Decimal(10, 2)
+  Unit             String?  @db.VarChar(50)
+  Notes            String?  @db.VarChar(300)
+  IsPantryItem     Boolean  @default(false)
+  Meal             Meal     @relation(fields: [MealID], references: [MealID])
+
+  @@index([MealID])
+}
+
+model MealTag {
+  MealTagID Int    @id @default(autoincrement())
+  MealID    Int
+  Tag       String @db.VarChar(50)
+  Meal      Meal   @relation(fields: [MealID], references: [MealID])
+
+  @@unique([MealID, Tag])
+  @@index([MealID])
+}
+
+model MealPlanWeek {
+  MealPlanWeekID Int             @id @default(autoincrement())
+  FamilyID       Int
+  WeekStart      DateTime        @db.Date
+  CreatedAt      DateTime        @default(now())
+  UpdatedAt      DateTime        @updatedAt
+  Family         Family          @relation(fields: [FamilyID], references: [FamilyID])
+  Entries        MealPlanEntry[]
+
+  @@unique([FamilyID, WeekStart])
+  @@index([FamilyID])
+}
+
+model MealPlanEntry {
+  MealPlanEntryID Int          @id @default(autoincrement())
+  MealPlanWeekID  Int
+  MealID          Int
+  DayOfWeek       Int
+  MealSlot        MealSlot
+  Servings        Int          @default(4)
+  Notes           String?      @db.VarChar(500)
+  AddedByUserID   String       @db.VarChar(36)
+  AddedAt         DateTime     @default(now())
+  MealPlanWeek    MealPlanWeek @relation(fields: [MealPlanWeekID], references: [MealPlanWeekID])
+  Meal            Meal         @relation(fields: [MealID], references: [MealID])
+  AddedBy         Users        @relation(fields: [AddedByUserID], references: [UserID])
+
+  @@unique([MealPlanWeekID, DayOfWeek, MealSlot])
+  @@index([MealPlanWeekID])
+  @@index([MealID])
+  @@index([AddedByUserID])
+}
+
+model Recipe {
+  RecipeID         Int               @id @default(autoincrement())
+  FamilyID         Int
+  Title            String            @db.VarChar(200)
+  Subtitle         String?           @db.VarChar(200)
+  Description      String?           @db.VarChar(1000)
+  OriginStory      String?           @db.Text
+  TraditionNotes   String?           @db.Text
+  FirstCookedAt    DateTime?         @db.Date
+  Servings         Int?
+  PrepMinutes      Int?
+  CookMinutes      Int?
+  CreatedByUserID  String            @db.VarChar(36)
+  CreatedAt        DateTime          @default(now())
+  UpdatedAt        DateTime          @updatedAt
+  Visibility       RecipeVisibility  @default(FAMILY)
+  ShareToken       String?           @unique
+  SourceUrl        String?           @db.VarChar(500)
+  ExternalSource   String?           @db.VarChar(100)
+  ExternalId       String?           @db.VarChar(150)
+  CoverImageUrl    String?           @db.VarChar(500)
+  Family           Family            @relation(fields: [FamilyID], references: [FamilyID])
+  CreatedBy        Users             @relation(fields: [CreatedByUserID], references: [UserID])
+  Ingredients      RecipeIngredient[]
+  Steps            RecipeStep[]
+  Memories         RecipeMemory[]
+  Favorites        RecipeFavorite[]
+  Meals            Meal[]            // Meals that reference this recipe
+
+  @@index([FamilyID])
+  @@index([CreatedByUserID])
+  @@index([Visibility])
+}
+
+model RecipeIngredient {
+  RecipeIngredientID Int     @id @default(autoincrement())
+  RecipeID           Int
+  SectionTitle       String? @db.VarChar(150)
+  Name               String  @db.VarChar(200)
+  Quantity           String? @db.VarChar(100)
+  Notes              String? @db.VarChar(300)
+  SortOrder          Int     @default(0)
+  Recipe             Recipe  @relation(fields: [RecipeID], references: [RecipeID])
+
+  @@index([RecipeID])
+}
+
+model RecipeStep {
+  RecipeStepID  Int     @id @default(autoincrement())
+  RecipeID      Int
+  SectionTitle  String? @db.VarChar(150)
+  Instruction   String  @db.Text
+  SortOrder     Int     @default(0)
+  Tip           String? @db.VarChar(300)
+  Recipe        Recipe  @relation(fields: [RecipeID], references: [RecipeID])
+
+  @@index([RecipeID])
+}
+
+model RecipeMemory {
+  RecipeMemoryID  Int      @id @default(autoincrement())
+  RecipeID        Int
+  FamilyID        Int
+  Message         String   @db.VarChar(1000)
+  StoryTitle      String?  @db.VarChar(200)
+  SharedByUserID  String   @db.VarChar(36)
+  SharedAt        DateTime @default(now())
+  Recipe          Recipe   @relation(fields: [RecipeID], references: [RecipeID])
+  Family          Family   @relation(fields: [FamilyID], references: [FamilyID])
+  SharedBy        Users    @relation(fields: [SharedByUserID], references: [UserID])
+
+  @@index([RecipeID])
+  @@index([FamilyID])
+  @@index([SharedByUserID])
+}
+
+model RecipeFavorite {
+  RecipeFavoriteID Int     @id @default(autoincrement())
+  RecipeID         Int
+  UserID           String  @db.VarChar(36)
+  MarkedAt         DateTime @default(now())
+  Recipe           Recipe  @relation(fields: [RecipeID], references: [RecipeID])
+  User             Users   @relation(fields: [UserID], references: [UserID])
+
+  @@unique([RecipeID, UserID])
+  @@index([RecipeID])
+  @@index([UserID])
+}
+
+model SavingsGoal {
+  SavingsGoalID   Int       @id @default(autoincrement())
+  FamilyID        Int
+  Name            String    @db.VarChar(100)
+  TargetAmount    Decimal   @db.Decimal(10, 2)
+  CurrentAmount   Decimal   @db.Decimal(10, 2)
+  Deadline        DateTime? @db.Date
+  CreatedByUserID String    @db.VarChar(36)
+  CreatedAt       DateTime  @default(now())
+  Family          Family    @relation(fields: [FamilyID], references: [FamilyID])
+  Users           Users     @relation(fields: [CreatedByUserID], references: [UserID])
+}
+
+model FamilyWallet {
+  id            Int                 @id @default(autoincrement())
+  familyId      Int                 @unique
+  balanceCents  BigInt              @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  family        Family              @relation(fields: [familyId], references: [FamilyID])
+  ledgerEntries WalletLedgerEntry[]
+  ledgers       WalletLedger[]
+}
+
+model UserWallet {
+  id            Int                 @id @default(autoincrement())
+  familyId      Int
+  userId        String              @db.VarChar(36)
+  balanceCents  BigInt              @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  family        Family              @relation(fields: [familyId], references: [FamilyID])
+  user          Users               @relation(fields: [userId], references: [UserID])
+  ledgerEntries WalletLedgerEntry[]
+
+  @@unique([familyId, userId])
+  @@index([userId])
+}
+
+model WalletLedger {
+  id                Int                 @id @default(autoincrement())
+  familyId          Int
+  familyWalletId    Int?
+  type              WalletLedgerType
+  status            WalletLedgerStatus  @default(PENDING)
+  amountCents       BigInt
+  currency          String              @default("USD") @db.VarChar(3)
+  description       String?             @db.VarChar(255)
+  referenceType     String?             @db.VarChar(64)
+  referenceId       String?             @db.VarChar(64)
+  externalId        String?             @db.VarChar(64)
+  metadata          Json?
+  initiatedByUserId String?             @db.VarChar(36)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  family            Family              @relation(fields: [familyId], references: [FamilyID])
+  familyWallet      FamilyWallet?       @relation(fields: [familyWalletId], references: [id])
+  initiatedByUser   Users?              @relation("WalletLedgerInitiatedBy", fields: [initiatedByUserId], references: [UserID])
+  entries           WalletLedgerEntry[]
+  taskRewards       Task[]
+  gigClaimRewards   Claim[]
+
+  @@index([familyId])
+  @@index([familyWalletId])
+  @@index([initiatedByUserId])
+  @@index([type])
+  @@index([status])
+  @@index([externalId])
+}
+
+model WalletLedgerEntry {
+  id                Int                    @id @default(autoincrement())
+  ledgerId          Int
+  accountType       WalletEntryAccountType
+  direction         WalletEntryDirection
+  amountCents       BigInt
+  familyWalletId    Int?
+  userWalletId      Int?
+  externalAccountId String?                @db.VarChar(64)
+  memo              String?                @db.VarChar(255)
+  applied           Boolean                @default(false)
+  createdAt         DateTime               @default(now())
+  ledger            WalletLedger           @relation(fields: [ledgerId], references: [id])
+  familyWallet      FamilyWallet?          @relation(fields: [familyWalletId], references: [id])
+  userWallet        UserWallet?            @relation(fields: [userWalletId], references: [id])
+
+  @@index([ledgerId])
+  @@index([familyWalletId])
+  @@index([userWalletId])
+  @@index([accountType])
+  @@index([direction])
+}
+
+enum RewardType {
+  screentime
+  points
+  currency
+}
+
+model Invitation {
+  InvitationID   Int           @id @default(autoincrement())
+  FamilyID       Int
+  Email          String        @unique
+  Token          String        @unique
+  ExpiresAt      DateTime
+  InvitedBy      String        @db.VarChar(36)
+  RelationshipID Int?
+  Family         Family        @relation(fields: [FamilyID], references: [FamilyID])
+  Inviter        Users         @relation(fields: [InvitedBy], references: [UserID])
+  Relationship   Relationship? @relation(fields: [RelationshipID], references: [RelationshipID])
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  UserID    String   @db.VarChar(36)
+  endpoint  String   @unique @db.VarChar(512)
+  p256dh    String   @db.VarChar(255)
+  auth      String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+  Users     Users    @relation(fields: [UserID], references: [UserID], onDelete: Cascade)
+
+  @@index([UserID])
+}
+
+model LinZMemory {
+  id        Int      @id @default(autoincrement())
+  familyId  Int
+  userId    String?  @db.VarChar(36)
+  key       String   @db.VarChar(255)
+  value     String   @db.Text
+  namespace String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Family Family @relation(fields: [familyId], references: [FamilyID])
+  Users  Users? @relation(fields: [userId], references: [UserID])
+
+  @@unique([familyId, userId, key])
+  @@index([familyId])
+  @@index([userId])
+}
+
+model LinZConversation {
+  id             Int       @id @default(autoincrement())
+  familyId       Int
+  userId         String?   @db.VarChar(36)
+  kind           String    @default("conversation")
+  content        String    @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  consolidatedAt DateTime?
+
+  family Family @relation(fields: [familyId], references: [FamilyID])
+  user   Users? @relation(fields: [userId], references: [UserID])
+
+  @@index([familyId])
+  @@index([userId])
+}
+
+model LinZFacts {
+  id              Int      @id @default(autoincrement())
+  familyId        Int
+  userId          String?  @db.VarChar(36)
+  key             String   @db.VarChar(256)
+  value           Json
+  lastConfirmedAt DateTime @default(now())
+  confidence      Float?
+  source          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  family Family @relation(fields: [familyId], references: [FamilyID])
+  user   Users? @relation(fields: [userId], references: [UserID])
+
+  @@unique([familyId, key, userId])
+  @@index([familyId])
+  @@index([userId])
+}
+
+model ConversationSummary {
+  id         Int      @id @default(autoincrement())
+  familyId   Int
+  userId     String?  @db.VarChar(36)
+  runId      String?  @db.VarChar(64)
+  summary    String   @db.VarChar(512)
+  tags       Json
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  family Family @relation(fields: [familyId], references: [FamilyID])
+  user   Users? @relation(fields: [userId], references: [UserID])
+
+  @@index([familyId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  timestamp   DateTime @default(now())
+  toolName    String   @db.VarChar(255)
+  toolInputs  String   @db.Text
+  toolOutput  String   @db.Text
+  userId      String?  @db.VarChar(36)
+  familyId    Int?
+  Users       Users?   @relation(fields: [usersUserID], references: [UserID])
+  usersUserID String?  @db.VarChar(36)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+enum IntegrationProvider {
+  INSTACART
+  KROGER
+  SHIPT
+}
+
+model Integration {
+  id           Int                 @id @default(autoincrement())
+  provider     IntegrationProvider
+  userId       String              @db.VarChar(36)
+  accessToken  String              @db.VarChar(1024) // TODO: Encrypt this value
+  refreshToken String?             @db.VarChar(1024) // TODO: Encrypt this value
+  expiresAt    DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  user Users @relation(fields: [userId], references: [UserID])
+
+  @@unique([provider, userId])
+  @@index([userId])
+}
+
+// Gigs Feature Models
+
+// Universal templates for gigs and rooms
+model RoomTemplate {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique @db.VarChar(255)
+  tags         String?       @db.VarChar(255)
+
+  familyRooms  FamilyRoom[]
+}
+
+model GigTemplate {
+  id                 Int      @id @default(autoincrement())
+  name               String   @db.VarChar(255)
+  estimatedMinutes   Int
+  applicableTags     String?  @db.VarChar(255)
+  familyGigs         FamilyGig[]
+}
+
+// Family-specific rooms and gigs
+model FamilyRoom {
+  id             Int          @id @default(autoincrement())
+  familyId       Int
+  roomTemplateId Int
+  name           String       @db.VarChar(255) // e.g., "John's Bedroom"
+  family         Family       @relation(fields: [familyId], references: [FamilyID])
+  roomTemplate   RoomTemplate @relation(fields: [roomTemplateId], references: [id])
+  familyGigs     FamilyGig[]
+
+  @@index([familyId])
+  @@index([roomTemplateId])
+}
+
+model FamilyGig {
+  id                    Int            @id @default(autoincrement())
+  familyId              Int
+  gigTemplateId         Int
+  familyRoomId          Int
+  cadenceType           CadenceType
+  maxPerDay             Int?
+  visible               Boolean        @default(true)
+  overridePoints        Int?
+  overrideCurrencyCents Int?
+  overrideScreenMinutes Int?
+  family                Family         @relation(fields: [familyId], references: [FamilyID])
+  gigTemplate           GigTemplate    @relation(fields: [gigTemplateId], references: [id])
+  familyRoom            FamilyRoom     @relation(fields: [familyRoomId], references: [id])
+  claims                Claim[]
+  rewardLedger          RewardLedger[]
+
+  @@index([familyId])
+  @@index([gigTemplateId])
+  @@index([familyRoomId])
+}
+
+model Claim {
+  id             Int           @id @default(autoincrement())
+  familyGigId    Int
+  userId         String        @db.VarChar(36)
+  claimedAt      DateTime      @default(now())
+  status         ClaimStatus
+  periodKey      String        @db.VarChar(255)
+  rewardLedgerId Int?
+  familyGig      FamilyGig     @relation(fields: [familyGigId], references: [id])
+  user           Users         @relation(fields: [userId], references: [UserID])
+  rewardLedger   WalletLedger? @relation(fields: [rewardLedgerId], references: [id])
+
+  @@unique([familyGigId, userId, periodKey])
+  @@index([familyGigId])
+  @@index([userId])
+  @@index([rewardLedgerId])
+}
+
+model RewardLedger {
+  id            Int        @id @default(autoincrement())
+  userId        String     @db.VarChar(36)
+  familyGigId   Int
+  rewardMode    RewardMode
+  points        Int?
+  currencyCents Int?
+  screenMinutes Int?
+  awardedAt     DateTime   @default(now())
+  user          Users      @relation(fields: [userId], references: [UserID])
+  familyGig     FamilyGig  @relation(fields: [familyGigId], references: [id])
+
+  @@index([userId])
+  @@index([familyGigId])
+}
+
+model FamilySetting {
+  familyId             Int        @id
+  weeklyAllowanceCents Int?
+  defaultRewardMode    RewardMode @default(points)
+  family               Family     @relation(fields: [familyId], references: [FamilyID])
+}
+
+enum CadenceType {
+  multipleDaily
+  daily
+  weekly
+  monthly
+}
+
+enum RewardMode {
+  points
+  currency
+  screenTime
+  auto
+}
+
+// Screen-time integration enums
+enum Provider {
+  APPLE
+  GOOGLE
+  MICROSOFT
+  META
+}
+
+enum GrantType {
+  GRANT
+  REVOKE
+  SET_LIMIT
+}
+
+enum GrantStatus {
+  PENDING
+  APPLIED
+  FAILED
+  EXPIRED
+}
+
+enum ClaimStatus {
+  claimed
+  completed
+}
+
+// Screen-time integration models
+model ScreenTimeAccount {
+  id              String    @id @default(cuid())
+  userId          String
+  provider        Provider
+  providerUserId  String
+  refreshTokenEnc String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  children        ScreenTimeChild[] @relation("AccountChildren")
+  devices         ScreenTimeDevice[] @relation("AccountDevices")
+  @@index([userId, provider])
+}
+
+model ScreenTimeChild {
+  id              String   @id @default(cuid())
+  familyChildId   String
+  accountId       String
+  account         ScreenTimeAccount @relation("AccountChildren", fields: [accountId], references: [id])
+  providerChildId String
+  devices         ScreenTimeDevice[] @relation("ChildDevices")
+  grants          ScreenTimeGrant[] @relation("ChildGrants")
+  createdAt       DateTime @default(now())
+  @@index([familyChildId])
+  @@index([accountId])
+}
+
+model ScreenTimeDevice {
+  id               String   @id @default(cuid())
+  childId          String
+  child            ScreenTimeChild @relation("ChildDevices", fields: [childId], references: [id])
+  accountId        String
+  account          ScreenTimeAccount @relation("AccountDevices", fields: [accountId], references: [id])
+  platform         Provider
+  providerDeviceId String
+  lastSeenAt       DateTime?
+  statusBlob       Json?
+  createdAt        DateTime @default(now())
+  @@index([childId, platform])
+  @@index([accountId])
+}
+
+model ScreenTimeGrant {
+  id              String     @id @default(cuid())
+  childId         String
+  child           ScreenTimeChild @relation("ChildGrants", fields: [childId], references: [id])
+  type            GrantType
+  minutesDelta    Int
+  status          GrantStatus @default(PENDING)
+  issuedByUserId  String?
+  providerPayload Json?
+  errorMessage    String?
+  createdAt       DateTime    @default(now())
+  appliedAt       DateTime?
+  idempotencyKey  String?     @unique
+  @@index([childId, status])
+}

@@ -4,9 +4,9 @@
 FamConomy is a full-stack family finance management application. It consists of a React + Vite frontend and a Node.js + Express + Prisma backend. The project helps families manage budgets, tasks, events, messaging, and more.
 
 ## Repository Structure
-- `famconomy/` — Frontend (React, Vite, TypeScript)
-- `famconomy-backend/` — Backend (Node.js, Express, TypeScript, Prisma)
-- `src/` — Additional pages/routes (legacy or migration in progress)
+- `apps/web/` — Frontend (React, Vite, TypeScript)
+- `apps/api/` — Backend (Node.js, Express, TypeScript, Prisma)
+- `packages/` — Shared libraries (to be populated as cross-platform work begins)
 
 ## Setup Instructions
 
@@ -17,19 +17,13 @@ cd FamConomy
 ```
 
 ### 2. Install Dependencies
-#### Frontend
+Install all workspace dependencies from the repository root:
 ```
-cd famconomy
-npm install
-```
-#### Backend
-```
-cd famconomy-backend
 npm install
 ```
 
 ### 3. Environment Variables
-- Copy `.env.example` to `.env` in both frontend and backend folders.
+- Copy `.env.example` to `.env` in both `apps/web` and `apps/api`.
 - Fill in required values (API URLs, DB credentials, OAuth keys, etc.)
 
 ### 4. Database Setup (Backend)
@@ -45,13 +39,11 @@ npx prisma db seed # optional
 ### 5. Running the Project
 #### Frontend
 ```
-cd famconomy
-npm run dev
+npm run web:dev
 ```
 #### Backend
 ```
-cd famconomy-backend
-npm run dev
+npm run api:dev
 ```
 
 ## Next Steps (from TODOs)

@@ -1,0 +1,57 @@
+{
+  "name": "famconomy-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "mobile"
+  ],
+  "scripts": {
+    "nx": "nx",
+    "web:dev": "nx serve web",
+    "web:build": "nx build web",
+    "api:dev": "nx serve api",
+    "api:build": "nx build api",
+    "lint": "nx run-many --target=lint --all",
+    "test": "nx run-many --target=test --all"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.14.5",
+    "@babel/preset-react": "^7.14.5",
+    "@nx/js": "21.6.6",
+    "@nx/react-native": "^21.6.6",
+    "@nx/vite": "21.6.6",
+    "@nx/web": "21.6.6",
+    "@react-native-community/cli": "~18.0.0",
+    "@react-native-community/cli-platform-android": "~18.0.0",
+    "@react-native-community/cli-platform-ios": "~18.0.0",
+    "@react-native/babel-preset": "~0.79.3",
+    "@react-native/metro-config": "~0.79.3",
+    "@swc-node/register": "~1.9.1",
+    "@swc/core": "~1.5.7",
+    "@swc/helpers": "~0.5.11",
+    "@types/node": "20.19.9",
+    "@types/react": "~19.0.10",
+    "@types/react-dom": "~19.0.6",
+    "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/ui": "^3.0.0",
+    "jiti": "2.4.2",
+    "jsdom": "~22.1.0",
+    "metro-config": "~0.82.4",
+    "metro-resolver": "~0.82.4",
+    "nx": "21.6.6",
+    "react-native-svg": "~15.11.2",
+    "react-native-svg-transformer": "~1.5.1",
+    "react-native-svg-web": "~1.0.9",
+    "react-native-web": "~0.20.0",
+    "tslib": "^2.3.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-native": "~0.79.3"
+  }
+}
