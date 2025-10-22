@@ -602,14 +602,14 @@ model Users {
   SavingsGoal                                           SavingsGoal[]
   Invitation                                            Invitation[]
   Message                                               Message[]
-  googleAccessToken                                     String?               @db.VarChar(255)
-  googleRefreshToken                                    String?               @db.VarChar(255)
-  facebookAccessToken                                   String?               @db.VarChar(255)
-  facebookRefreshToken                                  String?               @db.VarChar(255)
-  appleAccessToken                                      String?               @db.VarChar(255)
-  appleRefreshToken                                     String?               @db.VarChar(255)
-  microsoftAccessToken                                  String?               @db.VarChar(255)
-  microsoftRefreshToken                                 String?               @db.VarChar(255)
+  googleAccessToken                                     String?               @db.Text
+  googleRefreshToken                                    String?               @db.Text
+  facebookAccessToken                                   String?               @db.Text
+  facebookRefreshToken                                  String?               @db.Text
+  appleAccessToken                                      String?               @db.Text
+  appleRefreshToken                                     String?               @db.Text
+  microsoftAccessToken                                  String?               @db.Text
+  microsoftRefreshToken                                 String?               @db.Text
   plaidItemId                                           String?               @db.VarChar(255)
   PushSubscription                                      PushSubscription[]
   LinZMemory                                            LinZMemory[]

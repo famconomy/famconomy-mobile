@@ -110,6 +110,11 @@ Follow these instructions to set up the project locally.
     Create a `.env` file in the root of the `famconomy-backend` directory and add the following environment variables:
 
     ```
+    APP_BASE_URL=http://localhost:5173
+    API_BASE_URL=http://localhost:3000
+    # POST_AUTH_REDIRECT_URL=http://localhost:5173/app   # Optional override for post-login redirect
+    ENABLE_LINZ_CONSOLIDATION_JOB=false                  # Set to true to run the hourly LinZ consolidation job
+
     DATABASE_URL="mysql://user:password@localhost:3306/famconomy"
     JWT_SECRET=your_jwt_secret_key
     SESSION_SECRET=your_session_secret_key
@@ -117,24 +122,28 @@ Follow these instructions to set up the project locally.
     # Google OAuth2
     GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
     GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
-    GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
 
     # Facebook OAuth2
     FACEBOOK_APP_ID=YOUR_FACEBOOK_APP_ID
     FACEBOOK_APP_SECRET=YOUR_FACEBOOK_APP_SECRET
-    FACEBOOK_CALLBACK_URL=http://localhost:3000/auth/facebook/callback
+    # FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET are also supported
 
-    # Apple OAuth2
+    # Apple Sign-In
     APPLE_CLIENT_ID=YOUR_APPLE_CLIENT_ID
     APPLE_TEAM_ID=YOUR_APPLE_TEAM_ID
     APPLE_KEY_ID=YOUR_APPLE_KEY_ID
-    APPLE_PRIVATE_KEY=YOUR_APPLE_PRIVATE_KEY
-    APPLE_CALLBACK_URL=http://localhost:3000/auth/apple/callback
+    APPLE_PRIVATE_KEY_LOCATION="/absolute/path/to/AuthKey.p8"
+    # APPLE_PRIVATE_KEY_PATH="/absolute/path/to/AuthKey.p8" # Optional legacy name
 
     # Microsoft OAuth2
     MICROSOFT_CLIENT_ID=YOUR_MICROSOFT_CLIENT_ID
     MICROSOFT_CLIENT_SECRET=YOUR_MICROSOFT_CLIENT_SECRET
-    MICROSOFT_CALLBACK_URL=http://localhost:3000/auth/microsoft/callback
+
+    # Optional explicit callback overrides if your reverse proxy setup differs
+    # GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
+    # FACEBOOK_CALLBACK_URL=http://localhost:3000/auth/facebook/callback
+    # APPLE_CALLBACK_URL=http://localhost:3000/auth/apple/callback
+    # MICROSOFT_CALLBACK_URL=http://localhost:3000/auth/microsoft/callback
 
     # Web Push Notifications
     VAPID_PUBLIC_KEY=YOUR_VAPID_PUBLIC_KEY
@@ -156,6 +165,8 @@ Follow these instructions to set up the project locally.
     EMAIL_SERVICE_PASS=your_email_password
     EMAIL_FROM=FamConomy <no-reply@famconomy.com>
     ```
+
+    The LinZ memory consolidation cron job is disabled by default to avoid OpenAI quota errors. When you're ready to re-enable it, set `ENABLE_LINZ_CONSOLIDATION_JOB=true` and restart the server.
 
 ### Database Setup
 
@@ -187,6 +198,18 @@ yarn dev
 ```
 
 The API will be accessible at `http://localhost:3000`.
+
+### Verifying Social Logins
+
+To test Google, Facebook, Apple, or Microsoft login flows locally:
+
+1. Ensure `APP_BASE_URL` and `API_BASE_URL` (or `POST_AUTH_REDIRECT_URL`) in your backend `.env` match the URLs you are using during development.
+2. Update each provider's developer console to whitelist the callback URL emitted by the backend (e.g. `http://localhost:3000/auth/facebook/callback`). You can override these with the `*_CALLBACK_URL` environment variables if needed.
+3. Set `VITE_API_BASE_URL` in the frontend `.env` to the same API host so the login buttons redirect to the correct origin.
+4. Start the backend (`npm run dev`) and frontend (`npm run dev` in `famconomy`), visit the login page, and use the corresponding provider button.
+5. If you recently pulled backend changes, run `npx prisma db push` (or your usual migration command) so the wider OAuth token columns are applied before testing.
+
+Successful authentication will set the `fam_token` cookie and redirect you to the app dashboard.
 
 ## Security Configuration
 

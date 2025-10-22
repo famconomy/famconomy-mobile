@@ -79,7 +79,8 @@ Follow these instructions to set up the project locally.
 3.  **Create a `.env` file:**
     Create a `.env` file in the root of the `famconomy` directory and add the following environment variables. These should match your backend configuration.
     ```
-    VITE_API_BASE_URL=http://localhost:3000/api
+    VITE_API_BASE_URL=http://localhost:3000
+    # Leave unset to default to /api relative proxying when frontend and backend share a host
     VITE_SUPABASE_URL=YOUR_SUPABASE_URL
     VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
     ```

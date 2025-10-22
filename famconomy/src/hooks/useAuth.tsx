@@ -14,6 +14,22 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const rawApiBaseForOAuth = import.meta.env.VITE_API_BASE_URL ?? '/api';
+const normalizeOAuthBase = (value: string) => {
+  if (!value || value === '/') {
+    return '';
+  }
+  return value.endsWith('/') ? value.slice(0, -1) : value;
+};
+const providerLoginBaseUrl = normalizeOAuthBase(rawApiBaseForOAuth);
+
+const buildProviderLoginUrl = (provider: 'apple' | 'microsoft' | 'google' | 'facebook') => {
+  if (!providerLoginBaseUrl) {
+    return `/auth/${provider}`;
+  }
+  return `${providerLoginBaseUrl}/auth/${provider}`;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -104,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithProvider = async (provider: 'apple' | 'microsoft' | 'google' | 'facebook') => {
-    window.location.href = `/api/auth/${provider}`;
+    window.location.href = buildProviderLoginUrl(provider);
   };
 
   const logout = async () => {

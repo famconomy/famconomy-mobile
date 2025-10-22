@@ -6,12 +6,89 @@ import { Strategy as MicrosoftStrategy } from 'passport-microsoft';
 import jwt from 'jsonwebtoken';
 import { prisma } from './db';
 import 'dotenv/config';
+import {
+  getOAuthCallbackUrl,
+  resolveFacebookClientId,
+  resolveFacebookClientSecret,
+  resolveApplePrivateKeyLocation,
+  readEnvValue,
+} from './utils/urlConfig';
+import { downloadRemoteProfilePhoto } from './utils/profilePhoto';
+
+const requireEnv = (value: string | undefined, message: string): string => {
+  if (!value) {
+    throw new Error(message);
+  }
+  return value;
+};
+
+const PROFILE_PHOTO_MAX_LENGTH = 100;
+
+const normalizePhotoUrl = (value?: string | null, maxLength = PROFILE_PHOTO_MAX_LENGTH): string | undefined => {
+  if (!value || typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.length > maxLength) {
+    return trimmed.slice(0, maxLength);
+  }
+  return trimmed;
+};
+
+const resolveProfilePhotoUrl = async (
+  rawUrl: string | undefined,
+  provider: string,
+  providerUserId: string | number | undefined
+): Promise<string | undefined> => {
+  const downloaded = await downloadRemoteProfilePhoto(rawUrl, provider, providerUserId ?? 'unknown');
+  if (downloaded) {
+    return downloaded;
+  }
+  return normalizePhotoUrl(rawUrl);
+};
+
+const googleClientId = requireEnv(readEnvValue('GOOGLE_CLIENT_ID'), 'GOOGLE_CLIENT_ID is required for Google OAuth');
+const googleClientSecret = requireEnv(readEnvValue('GOOGLE_CLIENT_SECRET'), 'GOOGLE_CLIENT_SECRET is required for Google OAuth');
+
+const facebookClientId = requireEnv(
+  resolveFacebookClientId(),
+  'FACEBOOK_APP_ID or FACEBOOK_CLIENT_ID is required for Facebook OAuth'
+);
+const facebookClientSecret = requireEnv(
+  resolveFacebookClientSecret(),
+  'FACEBOOK_APP_SECRET or FACEBOOK_CLIENT_SECRET is required for Facebook OAuth'
+);
+
+const appleClientId = requireEnv(readEnvValue('APPLE_CLIENT_ID'), 'APPLE_CLIENT_ID is required for Sign in with Apple');
+const appleTeamId = requireEnv(readEnvValue('APPLE_TEAM_ID'), 'APPLE_TEAM_ID is required for Sign in with Apple');
+const appleKeyId = requireEnv(readEnvValue('APPLE_KEY_ID'), 'APPLE_KEY_ID is required for Sign in with Apple');
+const applePrivateKeyLocation = requireEnv(
+  resolveApplePrivateKeyLocation(),
+  'APPLE_PRIVATE_KEY_LOCATION or APPLE_PRIVATE_KEY_PATH is required for Sign in with Apple'
+);
+
+const microsoftClientId = requireEnv(
+  readEnvValue('MICROSOFT_CLIENT_ID'),
+  'MICROSOFT_CLIENT_ID is required for Microsoft OAuth'
+);
+const microsoftClientSecret = requireEnv(
+  readEnvValue('MICROSOFT_CLIENT_SECRET'),
+  'MICROSOFT_CLIENT_SECRET is required for Microsoft OAuth'
+);
+
+const googleCallbackUrl = getOAuthCallbackUrl('google');
+const facebookCallbackUrl = getOAuthCallbackUrl('facebook');
+const appleCallbackUrl = getOAuthCallbackUrl('apple');
+const microsoftCallbackUrl = getOAuthCallbackUrl('microsoft');
 
 // Google Strategy
 passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID!,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-  callbackURL: 'https://famconomy.com/api/auth/google/callback',
+  clientID: googleClientId,
+  clientSecret: googleClientSecret,
+  callbackURL: googleCallbackUrl,
   scope: ['profile', 'email', 'https://www.googleapis.com/auth/calendar'], // Add calendar scope
 }, async (accessToken: any, refreshToken: any, profile: any, done: any) => {
   try {
@@ -21,13 +98,15 @@ passport.use(new GoogleStrategy({
     }
     let user = await prisma.users.findUnique({ where: { Email: email } });
 
+    const photoUrl = await resolveProfilePhotoUrl(profile.photos?.[0]?.value, 'google', profile?.id);
+
     if (!user) {
       user = await prisma.users.create({
         data: {
           Email: email,
           FirstName: profile.name?.givenName || '',
           LastName: profile.name?.familyName || '',
-          ProfilePhotoUrl: profile.photos?.[0]?.value || '',
+          ProfilePhotoUrl: photoUrl ?? null,
           PasswordHash: 'oauth_account_no_password_set',
           googleAccessToken: accessToken, // Store accessToken
           googleRefreshToken: refreshToken, // Store refreshToken
@@ -35,12 +114,16 @@ passport.use(new GoogleStrategy({
       });
     } else {
       // Update existing user with new tokens (tokens can expire and be refreshed)
+      const updateData: any = {
+        googleAccessToken: accessToken,
+        googleRefreshToken: refreshToken,
+      };
+      if (photoUrl) {
+        updateData.ProfilePhotoUrl = photoUrl;
+      }
       user = await prisma.users.update({
         where: { UserID: user.UserID },
-        data: {
-          googleAccessToken: accessToken,
-          googleRefreshToken: refreshToken,
-        },
+        data: updateData,
       });
     }
 
@@ -53,10 +136,10 @@ passport.use(new GoogleStrategy({
 
 // Facebook Strategy
 passport.use(new FacebookStrategy({
-    clientID: process.env.FACEBOOK_APP_ID!,
-    clientSecret: process.env.FACEBOOK_APP_SECRET!,
-    callbackURL: "https://famconomy.com/api/auth/facebook/callback",
-    profileFields: ['id', 'displayName', 'emails', 'name']
+    clientID: facebookClientId,
+    clientSecret: facebookClientSecret,
+    callbackURL: facebookCallbackUrl,
+    profileFields: ['id', 'displayName', 'emails', 'name', 'photos']
   },
   async (accessToken: any, refreshToken: any, profile: any, done: any) => {
     try {
@@ -66,25 +149,31 @@ passport.use(new FacebookStrategy({
         }
         let user = await prisma.users.findUnique({ where: { Email: email } });
     
+        const photoUrl = await resolveProfilePhotoUrl(profile.photos?.[0]?.value, 'facebook', profile?.id);
+
         if (!user) {
           user = await prisma.users.create({
             data: {
               Email: email,
               FirstName: profile.name?.givenName || '',
               LastName: profile.name?.familyName || '',
-              ProfilePhotoUrl: profile.photos?.[0]?.value || '',
+              ProfilePhotoUrl: photoUrl ?? null,
               PasswordHash: 'oauth_account_no_password_set',
               facebookAccessToken: accessToken,
               facebookRefreshToken: refreshToken,
             }
           });
         } else {
+          const updateData: any = {
+            facebookAccessToken: accessToken,
+            facebookRefreshToken: refreshToken,
+          };
+          if (photoUrl) {
+            updateData.ProfilePhotoUrl = photoUrl;
+          }
           user = await prisma.users.update({
             where: { UserID: user.UserID },
-            data: {
-              facebookAccessToken: accessToken,
-              facebookRefreshToken: refreshToken,
-            },
+            data: updateData,
           });
         }
     
@@ -98,11 +187,11 @@ passport.use(new FacebookStrategy({
 
 // Apple Strategy
 passport.use(new AppleStrategy({
-    clientID: process.env.APPLE_CLIENT_ID!,
-    teamID: process.env.APPLE_TEAM_ID!,
-    keyID: process.env.APPLE_KEY_ID!,
-    privateKeyLocation: process.env.APPLE_PRIVATE_KEY_LOCATION!,
-    callbackURL: "https://famconomy.com/api/auth/apple/callback",
+    clientID: appleClientId,
+    teamID: appleTeamId,
+    keyID: appleKeyId,
+    privateKeyLocation: applePrivateKeyLocation,
+    callbackURL: appleCallbackUrl,
     scope: ['name', 'email'],
     passReqToCallback: true
 },
@@ -180,9 +269,9 @@ async (req: any, accessToken: any, refreshToken: any, idToken: any, profile: any
 
 // Microsoft Strategy
 passport.use(new MicrosoftStrategy({
-    clientID: process.env.MICROSOFT_CLIENT_ID!,
-    clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-    callbackURL: "https://famconomy.com/api/auth/microsoft/callback",
+    clientID: microsoftClientId,
+    clientSecret: microsoftClientSecret,
+    callbackURL: microsoftCallbackUrl,
     scope: ['user.read']
   },
   async (accessToken: any, refreshToken: any, profile: any, done: any) => {
@@ -195,25 +284,31 @@ passport.use(new MicrosoftStrategy({
         }
         let user = await prisma.users.findUnique({ where: { Email: email } });
     
+        const photoUrl = await resolveProfilePhotoUrl(profile.photos?.[0]?.value, 'microsoft', profile?.id);
+
         if (!user) {
           user = await prisma.users.create({
             data: {
               Email: email,
               FirstName: profile.name?.givenName || '',
               LastName: profile.name?.familyName || '',
-              ProfilePhotoUrl: profile.photos?.[0]?.value || '',
+              ProfilePhotoUrl: photoUrl ?? null,
               PasswordHash: 'oauth_account_no_password_set',
               microsoftAccessToken: accessToken,
               microsoftRefreshToken: refreshToken,
             }
           });
         } else {
+          const updateData: any = {
+            microsoftAccessToken: accessToken,
+            microsoftRefreshToken: refreshToken,
+          };
+          if (photoUrl) {
+            updateData.ProfilePhotoUrl = photoUrl;
+          }
           user = await prisma.users.update({
             where: { UserID: user.UserID },
-            data: {
-              microsoftAccessToken: accessToken,
-              microsoftRefreshToken: refreshToken,
-            },
+            data: updateData,
           });
         }
     

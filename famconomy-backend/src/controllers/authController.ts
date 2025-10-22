@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../db';
 import { sendEmail } from '../utils/emailService';
+import { getAppBaseUrl } from '../utils/urlConfig';
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 let passwordResetTableEnsured = false;
@@ -153,14 +154,6 @@ export const getVapidPublicKey = async (req: Request, res: Response) => {
     console.error('Error getting VAPID public key:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
-};
-
-const getAppBaseUrl = () => {
-  const explicit = process.env.APP_BASE_URL || process.env.FRONTEND_URL;
-  if (explicit) {
-    return explicit;
-  }
-  return process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : 'https://famconomy.com';
 };
 
 export const requestPasswordReset = async (req: Request, res: Response) => {
