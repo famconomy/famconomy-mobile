@@ -137,12 +137,14 @@ Follow these instructions to set up the project locally.
     # Microsoft OAuth2
     MICROSOFT_CLIENT_ID=YOUR_MICROSOFT_CLIENT_ID
     MICROSOFT_CLIENT_SECRET=YOUR_MICROSOFT_CLIENT_SECRET
+    MICROSOFT_MOBILE_REDIRECT_URI=msauth.com.famconomy.mobile://auth/redirect
 
     # Optional explicit callback overrides if your reverse proxy setup differs
     # GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
     # FACEBOOK_CALLBACK_URL=http://localhost:3000/auth/facebook/callback
     # APPLE_CALLBACK_URL=http://localhost:3000/auth/apple/callback
     # MICROSOFT_CALLBACK_URL=http://localhost:3000/auth/microsoft/callback
+    # FACEBOOK_REDIRECT_URI=https://www.facebook.com/connect/login_success.html
 
     # Web Push Notifications
     VAPID_PUBLIC_KEY=YOUR_VAPID_PUBLIC_KEY

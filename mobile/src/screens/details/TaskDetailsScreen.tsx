@@ -1,0 +1,70 @@
+import React from 'react';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { useAppStore } from '../../store/appStore';
+import { Text } from '../../components/ui/Text';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { spacing, lightTheme, darkTheme } from '../../theme';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { MainStackParamList } from '../../types';
+
+type Props = NativeStackScreenProps<MainStackParamList, 'TaskDetails'>;
+
+const TaskDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
+  const { theme } = useAppStore();
+  const isDark = theme === 'dark';
+  const themeColors = isDark ? darkTheme : lightTheme;
+  const { taskId } = route.params;
+
+  return (
+    <ScrollView
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.header}>
+        <Button
+          title="← Back"
+          onPress={() => navigation.goBack()}
+          variant="outline"
+          size="small"
+          isDark={isDark}
+        />
+      </View>
+
+      <Card isDark={isDark} style={styles.card}>
+        <Text variant="h2" isDark={isDark}>
+          Task {taskId}
+        </Text>
+        <Text variant="body" color="textSecondary" isDark={isDark} style={styles.text}>
+          Task details coming soon
+        </Text>
+      </Card>
+
+      <View style={styles.actions}>
+        <Button title="Edit" onPress={() => {}} isDark={isDark} variant="primary" />
+        <Button title="Mark Complete" onPress={() => {}} isDark={isDark} variant="secondary" />
+      </View>
+    </ScrollView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: spacing[4],
+  },
+  header: {
+    marginBottom: spacing[4],
+  },
+  card: {
+    marginBottom: spacing[4],
+  },
+  text: {
+    marginTop: spacing[2],
+  },
+  actions: {
+    gap: spacing[2],
+  },
+});
+
+export default TaskDetailsScreen;

@@ -1,6 +1,59 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "master",
+  "targetDefaults": {
+    "typecheck": {
+      "cache": true,
+      "inputs": ["default", "^default"]
+    },
+    "lint": {
+      "cache": true,
+      "inputs": ["default", "^default"]
+    },
+    "test": {
+      "cache": true,
+      "inputs": ["default", "^default"],
+      "dependsOn": ["build"]
+    },
+    "build": {
+      "cache": true,
+      "inputs": ["default", "^default"],
+      "dependsOn": ["^build"]
+    },
+    "build-ios": {
+      "cache": true,
+      "inputs": ["default", "^default"],
+      "dependsOn": ["build"]
+    },
+    "build-android": {
+      "cache": true,
+      "inputs": ["default", "^default"],
+      "dependsOn": ["build"]
+    },
+    "bundle": {
+      "cache": true,
+      "inputs": ["default", "^default"],
+      "dependsOn": ["build"]
+    },
+    "vite:build": {
+      "cache": true,
+      "inputs": ["default", "^default"]
+    },
+    "@nx/vite:build": {
+      "cache": true,
+      "inputs": ["default", "^default"]
+    }
+  },
+  "cacheableOperations": [
+    "typecheck",
+    "lint",
+    "test",
+    "build",
+    "build-ios",
+    "build-android",
+    "bundle",
+    "vite:build"
+  ],
   "plugins": [
     {
       "plugin": "@nx/js/typescript",

@@ -16,6 +16,10 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": ["famconomy-monorepo"]
+    "customConditions": ["famconomy-monorepo"],
+    "paths": {
+      "@famconomy/shared": ["packages/shared/src"],
+      "@famconomy/shared/*": ["packages/shared/src/*"]
+    }
   }
 }

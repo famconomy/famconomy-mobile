@@ -3,6 +3,12 @@ import passport from '../passport';
 import { registerUser, loginUser, getCurrentUser, checkEmail, requestPasswordReset, resetPassword } from '../controllers/authController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { getPostAuthRedirectUrl } from '../utils/urlConfig';
+import {
+  appleOAuthMobile,
+  facebookOAuthMobile,
+  googleOAuthMobile,
+  microsoftOAuthMobile,
+} from '../controllers/mobileOAuthController';
 
 const router = express.Router();
 
@@ -71,5 +77,11 @@ router.get('/microsoft/callback',
   passport.authenticate('microsoft', { session: false }),
   handleOAuthSuccess
 );
+
+// 📱 Mobile OAuth token exchange endpoints
+router.post('/oauth/google', googleOAuthMobile);
+router.post('/oauth/facebook', facebookOAuthMobile);
+router.post('/oauth/apple', appleOAuthMobile);
+router.post('/oauth/microsoft', microsoftOAuthMobile);
 
 export default router;

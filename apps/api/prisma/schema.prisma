@@ -172,6 +172,12 @@ model Family {
   MealPlanWeek          MealPlanWeek[]
   Recipe                Recipe[]
   RecipeMemory          RecipeMemory[]
+  familyControlsAccounts FamilyControlsAccount[]
+  authorizationTokens   AuthorizationToken[]
+  screenTimeRecords     ScreenTimeRecord[]
+  screenTimeSchedules   ScreenTimeSchedule[]
+  deviceControlPolicies DeviceControlPolicy[]
+  familyControlsEvents  FamilyControlsEvent[]
 
   @@index([CreatedByUserID], map: "CreatedByUserID")
 }
@@ -639,6 +645,15 @@ model Users {
   Recipe        Recipe[]
   RecipeMemory  RecipeMemory[]
   RecipeFavorite RecipeFavorite[]
+  
+  familyControlsAccounts                                FamilyControlsAccount[]
+  authTokensGrantedBy                                   AuthorizationToken[]  @relation("AuthTokenGrantedBy")
+  authTokensTargetedTo                                  AuthorizationToken[]  @relation("AuthTokenTargetUser")
+  screenTimeRecords                                     ScreenTimeRecord[]
+  screenTimeSchedulesTarget                             ScreenTimeSchedule[]  @relation("ScreenTimeScheduleTarget")
+  screenTimeSchedulesCreator                            ScreenTimeSchedule[]  @relation("ScreenTimeScheduleCreator")
+  deviceControlPolicies                                 DeviceControlPolicy[]
+  familyControlsEvents                                  FamilyControlsEvent[]
 }
 
 model PlaidItem {
@@ -1335,3 +1350,178 @@ model ScreenTimeGrant {
   idempotencyKey  String?     @unique
   @@index([childId, status])
 }
+
+// ============================================================
+// Family Controls (iOS Native Integration) Models
+// ============================================================
+
+model FamilyControlsAccount {
+  id                      String                @id @default(cuid())
+  userId                  String                @db.VarChar(36)
+  familyId                Int
+  user                    Users                 @relation(fields: [userId], references: [UserID], onDelete: Cascade)
+  family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
+  
+  authorizationToken      String?               @db.Text
+  tokenExpiresAt          DateTime?
+  tokenScopes             String?               @db.Text  // Comma-separated: "screenTime,deviceControl,appBlock"
+  
+  screenTimeLimitMinutes  Int?
+  dailyScreenTimeMinutes  Int?
+  
+  lastSyncAt              DateTime?
+  isActive                Boolean               @default(true)
+  metadata                Json?
+  
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  
+  authorizationTokens     AuthorizationToken[]
+  screenTimeRecords       ScreenTimeRecord[]
+  
+  @@unique([userId, familyId])
+  @@index([familyId])
+  @@index([userId])
+}
+
+model AuthorizationToken {
+  id                      String                @id @default(cuid())
+  userId                  String                @db.VarChar(36)
+  targetUserId            String                @db.VarChar(36)
+  familyId                Int
+  familyControlsAccount   FamilyControlsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId               String
+  
+  user                    Users                 @relation("AuthTokenGrantedBy", fields: [userId], references: [UserID], onDelete: Cascade)
+  targetUser              Users                 @relation("AuthTokenTargetUser", fields: [targetUserId], references: [UserID], onDelete: Cascade)
+  family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
+  
+  token                   String                @db.Text @unique
+  grantedScopes           String                @db.Text  // Comma-separated scopes
+  expiresAt               DateTime
+  
+  lastUsedAt              DateTime?
+  usageCount              Int                   @default(0)
+  
+  isRevoked               Boolean               @default(false)
+  revokedAt               DateTime?
+  revokedByUserId         String?               @db.VarChar(36)
+  
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  
+  @@index([userId])
+  @@index([targetUserId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@index([isRevoked])
+}
+
+model ScreenTimeRecord {
+  id                      String                @id @default(cuid())
+  userId                  String                @db.VarChar(36)
+  familyId                Int
+  familyControlsAccount   FamilyControlsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId               String
+  
+  user                    Users                 @relation(fields: [userId], references: [UserID], onDelete: Cascade)
+  family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
+  
+  date                    DateTime              @db.Date
+  totalMinutesUsed        Int
+  dailyLimitMinutes       Int?
+  
+  categoryBreakdown       Json?                 // { "Social": 30, "Gaming": 45 }
+  appBreakdown            Json?                 // { "com.app.name": 15 }
+  warnings                Json?                 // Array of warning events
+  
+  lastUpdatedAt           DateTime
+  createdAt               DateTime              @default(now())
+  
+  @@unique([userId, familyId, date])
+  @@index([familyId])
+  @@index([userId])
+  @@index([date])
+}
+
+model ScreenTimeSchedule {
+  id                      String                @id @default(cuid())
+  familyId                Int
+  targetUserId            String                @db.VarChar(36)
+  createdByUserId         String                @db.VarChar(36)
+  
+  family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
+  targetUser              Users                 @relation("ScreenTimeScheduleTarget", fields: [targetUserId], references: [UserID], onDelete: Cascade)
+  createdByUser           Users                 @relation("ScreenTimeScheduleCreator", fields: [createdByUserId], references: [UserID], onDelete: Cascade)
+  
+  dailyLimitMinutes       Int?
+  startTime               String?               @db.VarChar(5)  // HH:mm
+  endTime                 String?               @db.VarChar(5)  // HH:mm
+  appliedDays             String?               @db.Text        // "MON,TUE,WED,THU,FRI"
+  categoryLimits          Json?                 // { "Social": 30, "Gaming": 45 }
+  
+  allowOverrides          Boolean               @default(false)
+  overrideApproverId      String?               @db.VarChar(36)
+  
+  status                  String                @default("ACTIVE")  // "PENDING", "ACTIVE", "INACTIVE", "SCHEDULED"
+  activatedAt             DateTime?
+  expiresAt               DateTime?
+  
+  metadata                Json?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  
+  @@index([familyId])
+  @@index([targetUserId])
+  @@index([status])
+}
+
+model DeviceControlPolicy {
+  id                      String                @id @default(cuid())
+  familyId                Int
+  deviceId                String
+  appliedByUserId         String                @db.VarChar(36)
+  
+  family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
+  appliedByUser           Users                 @relation(fields: [appliedByUserId], references: [UserID], onDelete: Cascade)
+  
+  blockedAppBundleIds     Json?                 // Array of app bundle IDs to block
+  deviceLocked            Boolean               @default(false)
+  lockedReason            String?
+  lockedUntil             DateTime?
+  
+  contentRestrictions     Json?                 // { "webContentRestricted": true, "explicitContent": false }
+  siriRestricted          Boolean               @default(false)
+  purchasesRestricted     Boolean               @default(false)
+  
+  isActive                Boolean               @default(true)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  
+  @@unique([familyId, deviceId])
+  @@index([familyId])
+}
+
+model FamilyControlsEvent {
+  id                      String                @id @default(cuid())
+  familyId                Int
+  userId                  String                @db.VarChar(36)
+  
+  family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
+  user                    Users                 @relation(fields: [userId], references: [UserID], onDelete: Cascade)
+  
+  eventType               String                // "AUTHORIZATION_GRANTED", "SCREEN_TIME_WARNING", etc.
+  eventData               Json
+  severity                String?               // "low", "medium", "high"
+  
+  processed               Boolean               @default(false)
+  processedAt             DateTime?
+  
+  createdAt               DateTime              @default(now())
+  
+  @@index([familyId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([processed])
+}
+

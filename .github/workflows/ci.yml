@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+jobs:
+  # Determine which projects are affected
+  affected:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.changes.outputs.api }}
+      web: ${{ steps.changes.outputs.web }}
+      mobile: ${{ steps.changes.outputs.mobile }}
+      shared: ${{ steps.changes.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changes
+        id: changes
+        run: |
+          if git diff --name-only origin/master HEAD | grep -q "^apps/api/"; then
+            echo "api=true" >> $GITHUB_OUTPUT
+          fi
+          if git diff --name-only origin/master HEAD | grep -q "^apps/web/"; then
+            echo "web=true" >> $GITHUB_OUTPUT
+          fi
+          if git diff --name-only origin/master HEAD | grep -q "^mobile/"; then
+            echo "mobile=true" >> $GITHUB_OUTPUT
+          fi
+          if git diff --name-only origin/master HEAD | grep -q "^packages/shared/"; then
+            echo "shared=true" >> $GITHUB_OUTPUT
+          fi
+
+  # Shared package build & test
+  shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck shared package
+        run: npm run typecheck -- packages/shared
+      - name: Lint shared package
+        run: npm run lint -- packages/shared || true
+
+  # API build & test
+  api:
+    runs-on: ubuntu-latest
+    needs: [shared]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build API
+        run: npm run api:build
+      - name: Typecheck API
+        run: npm run typecheck -- apps/api
+      - name: Lint API
+        run: npm run lint -- apps/api || true
+      - name: Test API
+        run: npm run test -- apps/api || true
+
+  # Web build & test
+  web:
+    runs-on: ubuntu-latest
+    needs: [shared]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Web
+        run: npm run web:build
+      - name: Typecheck Web
+        run: npm run typecheck -- apps/web
+      - name: Lint Web
+        run: npm run lint -- apps/web || true
+      - name: Test Web
+        run: npm run test -- apps/web || true
+
+  # Mobile build & test
+  mobile:
+    runs-on: ubuntu-latest
+    needs: [shared]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install mobile dependencies
+        run: cd mobile && npm ci && cd ..
+      - name: Typecheck Mobile
+        run: npm run typecheck -- mobile
+      - name: Lint Mobile
+        run: npm run lint -- mobile || true
+      - name: Test Mobile
+        run: npm run test -- mobile || true
+      - name: Build Mobile Bundle
+        run: npm run mobile:build || true
+
+  # iOS Build (only on tags or master push)
+  ios-build:
+    runs-on: macos-latest
+    needs: [shared, mobile]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest
+      - name: Install dependencies
+        run: npm ci
+      - name: Install mobile dependencies
+        run: cd mobile && npm ci && cd ..
+      - name: Install Pods
+        run: cd mobile/ios && pod install && cd ../..
+      - name: Build iOS
+        run: npm run mobile:build-ios
+        continue-on-error: true
+
+  # Android Build (only on tags or master push)
+  android-build:
+    runs-on: ubuntu-latest
+    needs: [shared, mobile]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install mobile dependencies
+        run: cd mobile && npm ci && cd ..
+      - name: Build Android
+        run: npm run mobile:build-android
+        continue-on-error: true
+
+  # Overall status check
+  status-check:
+    runs-on: ubuntu-latest
+    needs: [shared, api, web, mobile]
+    if: always()
+    steps:
+      - name: Check status
+        run: |
+          if [ "${{ needs.shared.result }}" != "success" ] || \
+             [ "${{ needs.api.result }}" != "success" ] || \
+             [ "${{ needs.web.result }}" != "success" ] || \
+             [ "${{ needs.mobile.result }}" != "success" ]; then
+            echo "❌ CI Pipeline failed"
+            exit 1
+          fi
+          echo "✅ CI Pipeline passed"

@@ -5,9 +5,47 @@ import crypto from 'crypto';
 import { prisma } from '../db';
 import { sendEmail } from '../utils/emailService';
 import { getAppBaseUrl } from '../utils/urlConfig';
+import type { Users } from '@prisma/client';
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 let passwordResetTableEnsured = false;
+
+const normalizeRoleName = (role?: string | null): 'parent' | 'guardian' | 'child' | 'admin' | 'none' => {
+  if (!role) {
+    return 'none';
+  }
+  const value = role.trim().toLowerCase();
+  if (value.includes('child')) return 'child';
+  if (value.includes('guardian')) return 'guardian';
+  if (value.includes('admin')) return 'admin';
+  if (value.includes('parent')) return 'parent';
+  return 'none';
+};
+
+const mapUserForResponse = async (user: Users) => {
+  const roleRecord = await prisma.userRole.findFirst({
+    where: { UserID: user.UserID },
+    include: { Role: true },
+  });
+
+  const firstName = user.FirstName?.trim() || '';
+  const lastName = user.LastName?.trim() || '';
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  return {
+    id: user.UserID,
+    email: user.Email,
+    firstName: firstName || undefined,
+    lastName: lastName || undefined,
+    full_name: fullName || undefined,
+    avatar: user.ProfilePhotoUrl || undefined,
+    profilePhotoUrl: user.ProfilePhotoUrl || undefined,
+    role: normalizeRoleName(roleRecord?.Role?.RoleName),
+    status: user.IsDeleted ? 'inactive' : 'active',
+    created_at: user.CreatedDate,
+    updated_at: user.UpdatedDate,
+  };
+};
 
 const ensurePasswordResetTable = async () => {
   if (passwordResetTableEnsured) {
@@ -73,7 +111,8 @@ export const registerUser = async (req: Request, res: Response) => {
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
-    res.json({ user });
+    const mappedUser = await mapUserForResponse(user);
+    res.json({ user: mappedUser });
   } catch (err: any) {
     console.error('registerUser: Registration failed.', err);
     res.status(500).json({ message: 'Registration failed', error: err });
@@ -98,7 +137,8 @@ export const loginUser = async (req: Request, res: Response) => {
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
-    res.json({ user });
+    const mappedUser = await mapUserForResponse(user);
+    res.json({ user: mappedUser });
   } catch (err: any) {
     console.error('loginUser: Login failed.', err);
     res.status(500).json({ message: 'Login failed', error: err });
@@ -112,18 +152,8 @@ export const getCurrentUser = async (req: Request & { userId?: string }, res: Re
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
-    // Map the backend user object to the frontend's expected shape
-    const { UserID, Email, FirstName, LastName, ProfilePhotoUrl, ...rest } = user;
-    const userForFrontend = {
-      id: UserID,
-      email: Email,
-      fullName: `${FirstName} ${LastName}`.trim(),
-      profilePhotoUrl: ProfilePhotoUrl,
-      ...rest
-    };
-
-    res.json(userForFrontend);
+    const mappedUser = await mapUserForResponse(user);
+    res.json(mappedUser);
   } catch (err: any) {
     res.status(500).json({ message: 'Failed to fetch user', error: err });
   }

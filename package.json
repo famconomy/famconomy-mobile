@@ -12,8 +12,19 @@
     "web:build": "nx build web",
     "api:dev": "nx serve api",
     "api:build": "nx build api",
+    "mobile:dev": "nx start mobile",
+    "mobile:build": "nx bundle mobile",
+    "mobile:build-ios": "nx build-ios mobile",
+    "mobile:build-android": "nx build-android mobile",
     "lint": "nx run-many --target=lint --all",
-    "test": "nx run-many --target=test --all"
+    "lint:affected": "nx affected --target=lint",
+    "test": "nx run-many --target=test --all",
+    "test:affected": "nx affected --target=test",
+    "build": "nx run-many --target=build --all",
+    "build:affected": "nx affected --target=build",
+    "build:all": "npm run build && npm run mobile:build",
+    "typecheck": "nx run-many --target=typecheck --all",
+    "typecheck:affected": "nx affected --target=typecheck"
   },
   "devDependencies": {
     "@babel/core": "^7.14.5",

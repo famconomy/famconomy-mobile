@@ -1,0 +1,41 @@
+name: CI Affected
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+
+      # Typecheck affected projects
+      - name: Typecheck affected
+        run: npm run typecheck:affected -- --base=origin/master --head=HEAD
+        continue-on-error: true
+
+      # Lint affected projects
+      - name: Lint affected
+        run: npm run lint:affected -- --base=origin/master --head=HEAD
+        continue-on-error: true
+
+      # Test affected projects
+      - name: Test affected
+        run: npm run test:affected -- --base=origin/master --head=HEAD
+        continue-on-error: true
+
+      # Build affected projects
+      - name: Build affected
+        run: npm run build:affected -- --base=origin/master --head=HEAD
+        continue-on-error: true

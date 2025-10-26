@@ -85,3 +85,23 @@ node_modules/
 
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+
+# Environment files (avoid committing secrets)
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Logs
+*.log
+**/*.log
+
+# TypeScript build info
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# React Native asset linking outputs (derived)
+**/android/app/src/main/assets/
+**/link-assets-manifest.json
+
+# Compiled output directories
+**/dist/

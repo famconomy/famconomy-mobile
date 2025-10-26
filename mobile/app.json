@@ -1,4 +1,44 @@
 {
   "name": "Mobile",
-  "displayName": "Mobile"
+  "displayName": "FamConomy",
+  "version": "1.0.0",
+  "slug": "famconomy",
+  "scheme": "famconomy",
+  "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "com.famconomy.mobile",
+    "infoPlist": {
+      "CFBundleURLTypes": [
+        {
+          "CFBundleURLName": "google",
+          "CFBundleURLSchemes": [
+            "com.googleusercontent.apps.328667852218-ofk3l0s1vu2n8k6sgdggl3dvcvlvk02e",
+            "328667852218-ofk3l0s1vu2n8k6sgdggl3dvcvlvk02e.apps.googleusercontent.com"
+          ]
+        },
+        {
+          "CFBundleURLName": "microsoft",
+          "CFBundleURLSchemes": ["msauth.com.famconomy.mobile"]
+        },
+        {
+          "CFBundleURLName": "facebook",
+          "CFBundleURLSchemes": ["fb"]
+        }
+      ],
+      "LSApplicationQueriesSchemes": ["fbapi", "fbauth2", "fbshare", "msauthenticator", "msauth"]
+    }
+  },
+  "android": {
+    "package": "com.famconomy.mobile",
+    "versionCode": 1
+  },
+  "plugins": [
+    "@react-native-firebase/app",
+    [
+      "@react-native-firebase/auth",
+      {
+        "nativeModule": true
+      }
+    ]
+  ]
 }

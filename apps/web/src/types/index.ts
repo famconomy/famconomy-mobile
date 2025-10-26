@@ -1,8 +1,13 @@
 import { EventInput } from '@fullcalendar/core';
+
+// Re-export core types from shared package
+export type { Task, TaskStatus, Message, Chat, ScreenTime, Gig, Room, ShoppingList, ShoppingListItem, Recipe, Meal, Wishlist, WishlistItem, Guideline, Budget, SavingsGoal, User, UserRole, UserStatus, Family, FamilyMember, FamilyInvite, FamilySettings, Relationship } from '@famconomy/shared';
+
+// Re-export local types
 export * from './wishlist';
 export * from './guidelines';
 
-// User Types
+// Local type overrides and extensions
 export type UserRole = 'admin' | 'parent' | 'child' | 'guardian';
 export type UserStatus = 'active' | 'inactive' | 'pending';
 
