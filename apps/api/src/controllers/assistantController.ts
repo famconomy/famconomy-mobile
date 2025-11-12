@@ -223,7 +223,7 @@ const extractMealsFromMemories = (
 ): string[] => {
   const meals: string[] = [];
   memories.forEach((memory) => {
-    if (keys.includes(memory.key)) {
+    if (keys.includes(memory.key) && memory.value) {
       meals.push(...parseMealListString(memory.value));
     }
   });
@@ -915,7 +915,7 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
   messages.push(userMessage);
 
   try {
-    let assistantResponse: OpenAI.Chat.Completions.ChatCompletion;
+  let assistantResponse: OpenAI.Chat.Completions.ChatCompletion;
 
     // Tool calling loop
     for (let i = 0; i < 5; i++) { // Limit iterations to prevent infinite loops
@@ -931,9 +931,9 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
       console.log('--- DEBUG: Messages sent to OpenAI ---', JSON.stringify(promptMessages, null, 2));
       console.log('--- DEBUG: Tools sent to OpenAI ---', JSON.stringify(tools, null, 2));
       assistantResponse = await openai.chat.completions.create({
-        model: 'gpt-4o', // Using gpt-4o as gpt-5 is not a real model name
-        messages: promptMessages, // Send the accumulated messages plus memory context
-        tools: tools,
+        model: 'gpt-4o',
+        messages: promptMessages,
+        tools: tools.map(tool => ({ ...tool, type: 'function' })),
         tool_choice: 'auto',
       });
 
@@ -1022,13 +1022,18 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
 
                 if (!relationship) {
                   // Create relationship if it doesn't exist (or handle as an error)
+                  // RelationshipID is required and not auto-incremented, so we must generate a new one
+                  const maxRelationship = await prisma.relationship.findFirst({
+                    orderBy: { RelationshipID: 'desc' },
+                  });
+                  const newRelationshipID = maxRelationship ? maxRelationship.RelationshipID + 1 : 1;
                   relationship = await prisma.relationship.create({
-                    data: { RelationshipName: relation },
+                    data: { RelationshipID: newRelationshipID, RelationshipName: relation },
                   });
                 }
 
                 // Add family member (FamilyUsers)
-                const familyUser = await prisma.familyUsers.upsert({
+                await prisma.familyUsers.upsert({
                   where: {
                     UserID_FamilyID: {
                       UserID: memberUser.UserID,
@@ -1194,7 +1199,7 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
                   where: {
                     familyId_userId_key: {
                       familyId: familyId,
-                      userId: memoryUserId || null, // Use null if userId is not provided
+                      userId: memoryUserId ?? '',
                       key: key,
                     },
                   },
@@ -1204,7 +1209,7 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
                   },
                   create: {
                     familyId: familyId,
-                    userId: memoryUserId,
+                    userId: memoryUserId ?? null,
                     key: key,
                     value: value
                   },
@@ -1219,7 +1224,7 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
                   where: {
                     familyId_userId_key: {
                       familyId: familyId,
-                      userId: retrieveUserId || null,
+                      userId: retrieveUserId ?? '',
                       key: retrieveKey,
                     },
                   },
@@ -1231,20 +1236,19 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
                 const createTaskParsed = createTaskSchema.parse(functionArgs);
                 let assignedToUserID = createTaskParsed.AssignedToUserID;
 
-
-
+                // Ensure required fields for _createTaskInternal
                 const createdTask = await _createTaskInternal({
                   FamilyID: familyId, // Use actual familyId from request
                   Title: createTaskParsed.Title,
-                  Description: createTaskParsed.Description,
-                  DueDate: createTaskParsed.DueDate ? new Date(createTaskParsed.DueDate) : undefined,
-                  AssignedToUserID: assignedToUserID, // Use resolved AssignedToUserID
-                  CreatedByUserID: userId, // Use actual userId from request
-                  IsCustom: createTaskParsed.IsCustom,
-                  SuggestedByChildID: createTaskParsed.SuggestedByChildID,
-                  ApprovedByUserID: createTaskParsed.ApprovedByUserID,
-                  RewardType: createTaskParsed.RewardType,
-                  RewardValue: createTaskParsed.RewardValue,
+                  Description: createTaskParsed.Description ?? '',
+                  DueDate: createTaskParsed.DueDate ? new Date(createTaskParsed.DueDate) : new Date(),
+                  AssignedToUserID: typeof assignedToUserID === 'undefined' ? '' : assignedToUserID,
+                  CreatedByUserID: userId ?? '',
+                  IsCustom: createTaskParsed.IsCustom ?? false,
+                  SuggestedByChildID: typeof createTaskParsed.SuggestedByChildID === 'undefined' ? '' : createTaskParsed.SuggestedByChildID,
+                  ApprovedByUserID: typeof createTaskParsed.ApprovedByUserID === 'undefined' ? '' : createTaskParsed.ApprovedByUserID,
+                  RewardType: typeof createTaskParsed.RewardType === 'undefined' ? '' : createTaskParsed.RewardType,
+                  RewardValue: typeof createTaskParsed.RewardValue === 'undefined' ? '' : createTaskParsed.RewardValue,
                 });
                 toolResult = `Task '${createdTask.Title}' (ID: ${createdTask.TaskID}) for family ${createdTask.FamilyID} created successfully.`;
                 break;
@@ -1289,7 +1293,6 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
           currentToolOutputs.push({
             tool_call_id: toolCall.id,
             role: 'tool',
-            name: functionName,
             content: JSON.stringify(toolResult),
           });
         }
@@ -1374,12 +1377,12 @@ export const handleAssistantRequest = async (req: Request, res: Response) => {
 
     // Fallback if loop limit reached without a final response
     return res.status(500).json({ error: 'Assistant did not provide a final response after multiple tool calls.' });
-
   } catch (error: any) {
     console.error('Error handling assistant request:', error);
     res.status(500).json({ error: 'Failed to communicate with assistant.' });
+    return;
   }
-};
+}
 
 export const streamOnboardingAssistant = async (req: Request, res: Response) => {
   console.log('[onboarding-stream] Function start');
@@ -1437,7 +1440,7 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
         where: {
           familyId_userId_key: {
             familyId: memoryFamilyId,
-            userId,
+            userId: userId ?? '',
             key: conversationKey,
           },
         },
@@ -1482,7 +1485,7 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
-      tools: onboardingTools,
+      tools: onboardingTools.map(tool => ({ ...tool, type: 'function' as const })),
       tool_choice: 'auto',
       stream: true,
     });
@@ -1578,13 +1581,13 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
               where: {
                 familyId_userId_key: {
                   familyId: memoryFamilyId,
-                  userId,
+                  userId: userId ?? '',
                   key: 'family_name',
                 },
               },
               create: {
                 familyId: memoryFamilyId,
-                userId,
+                userId: userId ?? null,
                 key: 'family_name',
                 value: JSON.stringify(family_name),
               },
@@ -1597,13 +1600,13 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
               where: {
                 familyId_userId_key: {
                   familyId: memoryFamilyId,
-                  userId,
+                  userId: userId ?? '',
                   key: 'member_candidates',
                 },
               },
               create: {
                 familyId: memoryFamilyId,
-                userId,
+                userId: userId ?? null,
                 key: 'member_candidates',
                 value: JSON.stringify(members),
               },
@@ -1616,13 +1619,13 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
               where: {
                 familyId_userId_key: {
                   familyId: memoryFamilyId,
-                  userId,
+                  userId: userId ?? '',
                   key: 'room_candidates',
                 },
               },
               create: {
                 familyId: memoryFamilyId,
-                userId,
+                userId: userId ?? null,
                 key: 'room_candidates',
                 value: JSON.stringify(rooms),
               },
@@ -1635,13 +1638,13 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
               where: {
                 familyId_userId_key: {
                   familyId: memoryFamilyId,
-                  userId,
+                  userId: userId ?? '',
                   key: 'status',
                 },
               },
               create: {
                 familyId: memoryFamilyId,
-                userId,
+                userId: userId ?? null,
                 key: 'status',
                 value: JSON.stringify({ state: next_step, updatedAt: new Date().toISOString() }),
               },
@@ -1681,13 +1684,13 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
         where: {
           familyId_userId_key: {
             familyId: memoryFamilyId,
-            userId,
+            userId: userId ?? '',
             key: conversationKey,
           },
         },
         create: {
           familyId: memoryFamilyId,
-          userId,
+          userId: userId ?? null,
           key: conversationKey,
           value: JSON.stringify(messages),
         },
@@ -1695,11 +1698,12 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
       });
     }
 
-    sendEvent('done', { next_step: latestState?.next_step ?? null });
-    logOnboardingStream('Streaming completed', { next_step: latestState?.next_step ?? null });
-    console.log('[onboarding-stream] ending response normally', { eventsSent });
-    res.end();
-    console.log('[onboarding-stream] Function end');
+  sendEvent('done', { next_step: latestState?.next_step ?? null });
+  logOnboardingStream('Streaming completed', { next_step: latestState?.next_step ?? null });
+  console.log('[onboarding-stream] ending response normally');
+  res.end();
+  console.log('[onboarding-stream] Function end');
+  return;
   } catch (error) {
     console.error('Error in streamOnboardingAssistant:', error);
     try {
@@ -1707,10 +1711,12 @@ export const streamOnboardingAssistant = async (req: Request, res: Response) => 
         return res.status(500).json({ error: 'Failed to stream onboarding assistant.' });
       }
       res.write(`event: error\ndata: ${JSON.stringify({ message: 'Failed to stream onboarding assistant.', details: `${error}` })}\n\n`);
-      console.log('[onboarding-stream] ending response after error', { eventsSent, error: String(error) });
+      console.log('[onboarding-stream] ending response after error', { error: String(error) });
       res.end();
+      return;
     } catch (nestedError) {
       console.error('Failed to send streaming error response:', nestedError);
+      return;
     }
   }
 };

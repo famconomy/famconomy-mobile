@@ -13,7 +13,8 @@ describe('Security Tests - Authorization', () => {
     const user1 = await prisma.users.create({
       data: {
         UserID: 'test-user-1',
-        FullName: 'Test User 1',
+        FirstName: 'Test',
+        LastName: 'User 1',
         Email: 'test1@example.com',
         PasswordHash: 'hash',
       },
@@ -22,7 +23,8 @@ describe('Security Tests - Authorization', () => {
     const user2 = await prisma.users.create({
       data: {
         UserID: 'test-user-2',
-        FullName: 'Test User 2',
+        FirstName: 'Test',
+        LastName: 'User 2',
         Email: 'test2@example.com',
         PasswordHash: 'hash',
       },

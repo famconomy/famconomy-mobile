@@ -90,7 +90,7 @@ export interface ContentRestriction {
   allowExplicitContent: boolean;
   allowInAppPurchases: boolean;
   allowAppInstallation: boolean;
-  allowSetting Changes: boolean;
+  allowSettingChanges: boolean;
   allowScreenRecording: boolean;
   createdAt: string;
   updatedAt: string;

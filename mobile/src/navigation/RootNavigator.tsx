@@ -22,6 +22,8 @@ import ShoppingScreen from '../screens/main/ShoppingScreen';
 import BudgetScreen from '../screens/main/BudgetScreen';
 import FamilyScreen from '../screens/main/FamilyScreen';
 import MoreScreen from '../screens/main/MoreScreen';
+import SettingsScreen from '../screens/main/SettingsScreen';
+import ProfileScreen from '../screens/main/ProfileScreen';
 
 // Detail screens
 import EventDetailsScreen from '../screens/details/EventDetailsScreen';
@@ -144,6 +146,16 @@ const MainNavigator: React.FC = () => {
         options={{
           animationEnabled: true,
         }}
+      />
+      <MainStack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ animationEnabled: true }}
+      />
+      <MainStack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ animationEnabled: true }}
       />
       <MainStack.Screen
         name="ChatDetail"

@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
 import { spacing, lightTheme, darkTheme, borderRadius, fontSize } from '../../theme';
-import type { Task } from '../../types';
+import type { Task, TaskPriority } from '../../types';
 import type { Theme } from '../../theme';
 
 interface TaskCardProps {
@@ -12,6 +12,10 @@ interface TaskCardProps {
   onPress?: () => void;
   onStatusChange?: (status: 'pending' | 'in_progress' | 'completed') => void;
   onDelete?: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
+  onUploadAttachment?: () => void;
+  onDeleteAttachment?: (attachmentId: number) => void;
 }
 
 const getStatusColor = (theme: Theme, status: string): string => {
@@ -68,18 +72,54 @@ const getCategoryEmoji = (category: string): string => {
   }
 };
 
+const getPriorityLabel = (priority?: TaskPriority): string | null => {
+  switch (priority) {
+    case 'urgent':
+      return 'Urgent';
+    case 'high':
+      return 'High';
+    case 'medium':
+      return 'Medium';
+    case 'low':
+      return 'Low';
+    default:
+      return null;
+  }
+};
+
+const getPriorityColors = (theme: Theme, priority?: TaskPriority) => {
+  switch (priority) {
+    case 'urgent':
+      return { background: theme.errorLight, text: theme.error };
+    case 'high':
+      return { background: theme.warningLight, text: theme.warning };
+    case 'medium':
+      return { background: theme.secondaryLight, text: theme.secondary };
+    case 'low':
+      return { background: theme.surfaceVariant, text: theme.textSecondary };
+    default:
+      return { background: theme.surfaceVariant, text: theme.textSecondary };
+  }
+};
+
 export const TaskCard: React.FC<TaskCardProps> = ({
   task,
   isDark = false,
   onPress,
   onStatusChange,
   onDelete,
+  onApprove,
+  onReject,
+  onUploadAttachment,
+  onDeleteAttachment,
 }) => {
   const theme = isDark ? darkTheme : lightTheme;
   const statusColor = getStatusColor(theme, task.status);
   const statusLabel = getStatusLabel(task.status);
   const categoryEmoji = getCategoryEmoji(task.category);
   const isCompleted = task.status === 'completed';
+  const priorityLabel = getPriorityLabel(task.priority);
+  const priorityColors = getPriorityColors(theme, task.priority);
 
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = dueDate && dueDate < new Date() && !isCompleted;
@@ -158,6 +198,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           </Text>
         </View>
 
+        {priorityLabel && (
+          <View
+            style={[
+              styles.priorityBadge,
+              {
+                backgroundColor: priorityColors.background,
+              },
+            ]}
+          >
+            <Text variant="caption" style={{ color: priorityColors.text }}>
+              {priorityLabel}
+            </Text>
+          </View>
+        )}
+
         {dueDateText && (
           <Text
             variant="caption"
@@ -182,6 +237,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           </View>
         )}
 
+        {task.assignedToName && (
+          <Text variant="caption" color="textSecondary" isDark={isDark}>
+            👤 {task.assignedToName}
+          </Text>
+        )}
+
         <Text
           variant="caption"
           isDark={isDark}
@@ -189,6 +250,45 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         >
           {statusLabel}
         </Text>
+      </View>
+
+      {/* Attachments Preview */}
+      {!!task.attachments?.length && (
+        <View style={[styles.attachmentsRow, { marginTop: spacing[2] }]}>
+          {task.attachments.slice(0, 4).map((att) => (
+            <View key={att.attachmentId} style={styles.attachmentItem}>
+              <Image source={{ uri: att.fileUrl }} style={styles.attachmentThumb} />
+              {onDeleteAttachment && (
+                <TouchableOpacity onPress={() => onDeleteAttachment(att.attachmentId)} style={styles.attachmentDeleteBtn}>
+                  <Text style={{ color: '#fff' }}>×</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Actions Row: Approvals + Upload */}
+      <View style={[styles.actionsRow, { marginTop: spacing[2] }]}>
+        {onUploadAttachment && (
+          <TouchableOpacity onPress={onUploadAttachment} style={[styles.actionChip, { borderColor: theme.primary }]}> 
+            <Text style={{ color: theme.primary }}>+ Attachment</Text>
+          </TouchableOpacity>
+        )}
+        {task.status === 'completed' && task.approvalStatus !== 'approved' && (
+          <View style={{ flexDirection: 'row', gap: spacing[2], marginLeft: 'auto' }}>
+            {onReject && (
+              <TouchableOpacity onPress={onReject} style={[styles.actionChip, { borderColor: theme.error }]}>
+                <Text style={{ color: theme.error }}>Reject</Text>
+              </TouchableOpacity>
+            )}
+            {onApprove && (
+              <TouchableOpacity onPress={onApprove} style={[styles.actionChip, { borderColor: theme.success }]}>
+                <Text style={{ color: theme.success }}>Approve</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
     </Card>
   );
@@ -234,6 +334,45 @@ const styles = StyleSheet.create({
   },
   rewardBadge: {
     borderRadius: borderRadius.base,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+  },
+  priorityBadge: {
+    borderRadius: borderRadius.base,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1] / 2,
+  },
+  attachmentsRow: {
+    flexDirection: 'row',
+    gap: spacing[2],
+  },
+  attachmentItem: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  attachmentThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  attachmentDeleteBtn: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  actionChip: {
+    borderWidth: 1,
+    borderRadius: 16,
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[1],
   },

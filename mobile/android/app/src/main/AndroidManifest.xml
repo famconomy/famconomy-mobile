@@ -21,6 +21,23 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+    <!-- Deep links: custom scheme famconomy:// -->
+    <intent-filter android:autoVerify="true">
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.DEFAULT" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="famconomy" />
+    </intent-filter>
+    <!-- Optional: https links to famconomy.com with /app or /invite paths -->
+    <intent-filter android:autoVerify="true">
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.DEFAULT" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" android:host="famconomy.com" android:pathPrefix="/app" />
+      <data android:scheme="https" android:host="www.famconomy.com" android:pathPrefix="/app" />
+      <data android:scheme="https" android:host="famconomy.com" android:pathPrefix="/invite" />
+      <data android:scheme="https" android:host="www.famconomy.com" android:pathPrefix="/invite" />
+    </intent-filter>
       </activity>
     </application>
 </manifest>

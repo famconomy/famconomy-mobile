@@ -1,68 +1,11 @@
-import { EventInput } from '@fullcalendar/core';
+import type { User } from '@famconomy/shared';
 
 // Re-export core types from shared package
-export type { Task, TaskStatus, Message, Chat, ScreenTime, Gig, Room, ShoppingList, ShoppingListItem, Recipe, Meal, Wishlist, WishlistItem, Guideline, Budget, SavingsGoal, User, UserRole, UserStatus, Family, FamilyMember, FamilyInvite, FamilySettings, Relationship } from '@famconomy/shared';
+export * from '@famconomy/shared';
 
 // Re-export local types
 export * from './wishlist';
 export * from './guidelines';
-
-// Local type overrides and extensions
-export type UserRole = 'admin' | 'parent' | 'child' | 'guardian';
-export type UserStatus = 'active' | 'inactive' | 'pending';
-
-export interface User {
-  id: string;
-  fullName: string;
-  email: string;
-  role: UserRole;
-  status: UserStatus;
-  avatar?: string;
-  familyId: string;
-  signupDate: string;
-  lastLogin: string | null;
-  phoneNumber?: string;
-  smsEnabled?: boolean;
-}
-
-// Family Types
-export interface Family {
-  id: string;
-  name: string;
-  members: User[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Message Types
-export interface Message {
-  id: string;
-  content: string;
-  senderId: string;
-  chatId: string;
-  timestamp: string;
-  status: 'sent' | 'delivered' | 'read';
-  type: 'text' | 'image' | 'file';
-  metadata?: {
-    fileName?: string;
-    fileSize?: number;
-    fileType?: string;
-    imageUrl?: string;
-  };
-}
-
-export interface Chat {
-  id: string;
-  name?: string;
-  type: 'direct' | 'group';
-  participants: string[];
-  familyId: string;
-  lastMessage?: Message;
-  createdAt: string;
-  updatedAt: string;
-  avatar?: string;
-  smsEnabled?: boolean;
-}
 
 // Calendar Types
 export interface CalendarEvent {

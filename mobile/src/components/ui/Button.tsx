@@ -18,7 +18,7 @@ interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   isDark?: boolean;
-  style?: ViewStyle;
+  style?: import('react-native').StyleProp<ViewStyle>;
 }
 
 const getButtonStyles = (
@@ -27,8 +27,8 @@ const getButtonStyles = (
   size: ButtonProps['size'] = 'medium',
   disabled: boolean = false,
   isDark: boolean = false
-) => {
-  const baseStyle = {
+) : ViewStyle => {
+  const baseStyle: ViewStyle = {
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: borderRadius.md,
@@ -67,12 +67,13 @@ const getButtonStyles = (
     },
   };
 
-  return {
+  const result: ViewStyle = {
     ...baseStyle,
     ...sizeStyles[size],
     ...variantStyles[variant],
     opacity: disabled ? 0.6 : 1,
   };
+  return result;
 };
 
 const getTextStyles = (

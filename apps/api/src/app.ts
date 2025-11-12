@@ -58,7 +58,7 @@ const app = express();
 app.use(loggingMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   if (shouldLogRequest(req.originalUrl)) {
     console.log('--- DEBUG: req.body in app.ts ---', req.body);
   }
@@ -68,9 +68,13 @@ app.use('/uploads', express.static('uploads'));
 app.use(cookieParser());
 
 // Middleware to extract tenantId and userId from headers
-app.use((req, res, next) => {
-  req.headers['x-tenant-id'] = req.headers['x-tenant-id'] || req.query.tenantId; // Allow query param for testing
-  req.headers['x-user-id'] = req.headers['x-user-id'] || req.query.userId; // Allow query param for testing
+app.use((req, _res, next) => {
+  const getStringOrArray = (val: unknown): string | string[] | undefined => {
+    if (typeof val === 'string' || Array.isArray(val)) return val;
+    return undefined;
+  };
+  req.headers['x-tenant-id'] = req.headers['x-tenant-id'] || getStringOrArray(req.query.tenantId);
+  req.headers['x-user-id'] = req.headers['x-user-id'] || getStringOrArray(req.query.userId);
   next();
 });
 
@@ -201,7 +205,7 @@ app.get('/delete-data', (_req, res) => {
     `);
 });
 
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   if (shouldLogRequest(req.originalUrl)) {
     console.log(`--- DEBUG: Request passing through generic middleware: ${req.method} ${req.url} ---`);
   }
@@ -210,7 +214,7 @@ app.use((req, res, next) => {
 
 app.use('/feedback', feedbackRoutes);
 
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'An unexpected error occurred.' });
 });
@@ -219,9 +223,12 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.use('/', assistantRoutes); // Use assistantRoutes for /assistant endpoint
 app.use('/', publicApiRoutes); // Use publicApiRoutes for /api/ endpoints
 
+
 httpServer.listen(3000, () => { // Change app.listen to httpServer.listen
   console.log('🚀 FamConomy API running at http://localhost:3000');
 });
+
+export { app };
 
 const linzJobEnabled = (process.env.ENABLE_LINZ_CONSOLIDATION_JOB ?? 'false').toLowerCase() === 'true';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { lightTheme, darkTheme, spacing, borderRadius, shadows } from '../../theme';
 import type { Theme } from '../../theme';
 
@@ -7,7 +7,7 @@ interface CardProps {
   children: React.ReactNode;
   isDark?: boolean;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   elevated?: boolean;
 }
 

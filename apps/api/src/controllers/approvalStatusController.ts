@@ -2,7 +2,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
 
-export const getAllApprovalStatuses = async (req: Request, res: Response) => {
+export const getAllApprovalStatuses = async (_req: Request, res: Response) => {
   try {
     const approvalStatuses = await prisma.approvalStatus.findMany();
     res.json(approvalStatuses);

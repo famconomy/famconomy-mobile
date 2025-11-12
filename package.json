@@ -42,8 +42,8 @@
     "@swc/core": "~1.5.7",
     "@swc/helpers": "~0.5.11",
     "@types/node": "20.19.9",
-    "@types/react": "~19.0.10",
-    "@types/react-dom": "~19.0.6",
+    "@types/react": "18.3.5",
+    "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@vitest/ui": "^3.0.0",
     "jiti": "2.4.2",
@@ -51,6 +51,7 @@
     "metro-config": "~0.82.4",
     "metro-resolver": "~0.82.4",
     "nx": "21.6.6",
+    "prisma": "^6.18.0",
     "react-native-svg": "~15.11.2",
     "react-native-svg-transformer": "~1.5.1",
     "react-native-svg-web": "~1.0.9",
@@ -61,8 +62,12 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "react-native": "~0.79.3"
+    "@prisma/client": "^6.18.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-native": "0.72.4"
+  },
+  "overrides": {
+    "react-native-reanimated": "3.3.0"
   }
 }

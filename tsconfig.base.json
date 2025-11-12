@@ -1,11 +1,14 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "composite": true,
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "importHelpers": true,
     "isolatedModules": true,
-    "lib": ["es2022"],
+    "lib": [
+      "es2022"
+    ],
     "module": "esnext",
     "moduleResolution": "bundler",
     "noEmitOnError": true,
@@ -16,10 +19,16 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": ["famconomy-monorepo"],
+    "customConditions": [
+      "famconomy-monorepo"
+    ],
     "paths": {
-      "@famconomy/shared": ["packages/shared/src"],
-      "@famconomy/shared/*": ["packages/shared/src/*"]
+      "@famconomy/shared": [
+        "packages/shared/src"
+      ],
+      "@famconomy/shared/*": [
+        "packages/shared/src/*"
+      ]
     }
   }
 }

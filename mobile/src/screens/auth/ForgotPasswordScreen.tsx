@@ -157,7 +157,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBackPress
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
-            error={emailError}
+            error={emailError || undefined}
           />
 
           <Button

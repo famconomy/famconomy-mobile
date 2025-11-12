@@ -5,6 +5,12 @@
   "references": [
     {
       "path": "./mobile"
+    },
+    {
+      "path": "./packages/shared"
+    },
+    {
+      "path": "./apps/api"
     }
   ]
 }

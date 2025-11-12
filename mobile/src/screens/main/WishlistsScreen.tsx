@@ -1,45 +1,88 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
+  ScrollView,
   StyleSheet,
-  FlatList,
-  TouchableOpacity,
+  View,
   RefreshControl,
-  ActivityIndicator,
-  Alert,
+  TouchableOpacity,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { Gift, Plus, User, Lock, Users as UsersIcon } from 'lucide-react-native';
-import { fetchWishlists, WishList } from '../../api/wishlists';
+import {
+  Gift,
+  Plus,
+  Lock,
+  Users as UsersIcon,
+  Link,
+} from 'lucide-react-native';
+import { useAppStore } from '../../store/appStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useFamily } from '../../hooks/useFamily';
+import {
+  fetchWishlists,
+  createWishlist,
+  WishList,
+  WishListVisibility,
+} from '../../api/wishlists';
+import { spacing, lightTheme, darkTheme, borderRadius, fontSize } from '../../theme';
+import { Text } from '../../components/ui/Text';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Toast } from '../../components/ui/Toast';
+import { Alert } from '../../components/ui/Alert';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+
+const VISIBILITY_OPTIONS: Array<{ value: WishListVisibility; label: string; icon: React.ReactNode }> = [
+  { value: 'FAMILY', label: 'Family', icon: <UsersIcon size={16} color="#10b981" /> },
+  { value: 'PARENTS', label: 'Parents only', icon: <Lock size={16} color="#f59e0b" /> },
+  { value: 'LINK', label: 'Shareable', icon: <Link size={16} color="#6366f1" /> },
+];
 
 const WishlistsScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const { theme } = useAppStore();
   const { user } = useAuth();
   const { family } = useFamily();
-  const familyId = family?.id ? Number(family.id) : undefined;
+  const familyId = family?.id ? Number(family.id) : null;
+
+  const isDark = theme === 'dark';
+  const themeColors = isDark ? darkTheme : lightTheme;
 
   const [wishlists, setWishlists] = useState<WishList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [ownerId, setOwnerId] = useState<string | undefined>(user?.id);
+  const [visibility, setVisibility] = useState<WishListVisibility>('FAMILY');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const members = family?.members ?? [];
+  const canManage = useMemo(
+    () => user?.role === 'parent' || user?.role === 'guardian' || user?.role === 'admin',
+    [user?.role],
+  );
 
   const loadWishlists = useCallback(async () => {
     if (!familyId) {
-      setError('No family ID provided');
+      setWishlists([]);
+      setError(null);
       setIsLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
     try {
-      const data = await fetchWishlists(familyId);
-      setWishlists(data);
       setError(null);
+      const data = await fetchWishlists(familyId);
+      setWishlists(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load wishlists');
-      console.error('Error fetching wishlists:', err);
+      const message = err instanceof Error ? err.message : 'Failed to load wishlists.';
+      setError(message);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -47,360 +90,468 @@ const WishlistsScreen: React.FC = () => {
   }, [familyId]);
 
   useEffect(() => {
-    loadWishlists();
+    loadWishlists().catch(() => {
+      // error already captured
+    });
   }, [loadWishlists]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    loadWishlists();
+    loadWishlists().catch(() => {
+      // error already captured
+    });
   }, [loadWishlists]);
 
-  const handleWishlistPress = useCallback(
-    (wishlist: WishList) => {
-      // TODO: Navigate to WishlistDetailsScreen once created
-      Alert.alert(wishlist.Title, `${wishlist.items?.length || 0} items`);
-    },
-    []
-  );
+  const formatOwnerName = useCallback((wishlist: WishList) => {
+    const owner = wishlist.owner;
+    if (!owner) return 'Family Member';
+    const first = owner.FirstName ?? '';
+    const last = owner.LastName ?? '';
+    const composed = `${first} ${last}`.trim();
+    return composed || 'Family Member';
+  }, []);
 
-  const getOwnerName = (wishlist: WishList) => {
-    if (!wishlist.owner) return 'Unknown';
-    const firstName = wishlist.owner.FirstName || '';
-    const lastName = wishlist.owner.LastName || '';
-    return `${firstName} ${lastName}`.trim() || 'Family Member';
-  };
+  const countByStatus = useCallback((wishlist: WishList, status: string) => {
+    if (!Array.isArray(wishlist.items)) return 0;
+    return wishlist.items.filter((item) => item.Status === status).length;
+  }, []);
 
-  const getVisibilityIcon = (visibility: string) => {
-    switch (visibility) {
-      case 'LINK':
-        return <Gift size={16} color="#6366f1" />;
-      case 'PARENTS':
-        return <Lock size={16} color="#f59e0b" />;
-      default:
-        return <UsersIcon size={16} color="#10b981" />;
+  const totalItems = useCallback((wishlist: WishList) => wishlist.items?.length ?? 0, []);
+
+  const handleCreateWishlist = async () => {
+    if (!familyId) {
+      setToast({ message: 'Join a family to create wishlists.', type: 'info' });
+      return;
     }
-  };
+    if (!title.trim()) {
+      setToast({ message: 'Give your wishlist a title.', type: 'info' });
+      return;
+    }
 
-  const getVisibilityLabel = (visibility: string) => {
-    switch (visibility) {
-      case 'LINK':
-        return 'Shareable';
-      case 'PARENTS':
-        return 'Parents Only';
-      default:
-        return 'Family';
+    setIsSubmitting(true);
+    try {
+      const created = await createWishlist(familyId, {
+        Title: title.trim(),
+        Description: description.trim() || undefined,
+        OwnerUserID: ownerId,
+        Visibility: visibility,
+      });
+      setWishlists((prev) => [created, ...prev]);
+      setToast({ message: 'Wishlist created', type: 'success' });
+      setCreateModalOpen(false);
+      setTitle('');
+      setDescription('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create wishlist.';
+      setToast({ message, type: 'error' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const renderWishlistCard = useCallback(
-    ({ item: wishlist }: { item: WishList }) => {
-      const itemCount = wishlist.items?.length || 0;
-      const reservedCount =
-        wishlist.items?.filter((item) => item.Status === 'RESERVED').length || 0;
-      const purchasedCount =
-        wishlist.items?.filter((item) => item.Status === 'PURCHASED').length ||
-        0;
-      const ownerName = getOwnerName(wishlist);
+    (wishlist: WishList) => {
+      const itemCount = totalItems(wishlist);
+      const reservedCount = countByStatus(wishlist, 'RESERVED');
+      const purchasedCount = countByStatus(wishlist, 'PURCHASED');
+      const ownerName = formatOwnerName(wishlist);
+      const visibilityMeta = VISIBILITY_OPTIONS.find((option) => option.value === wishlist.Visibility);
 
       return (
-        <TouchableOpacity
-          style={styles.wishlistCard}
-          onPress={() => handleWishlistPress(wishlist)}
-          activeOpacity={0.7}
-        >
-          {/* Header */}
-          <View style={styles.wishlistHeader}>
-            <View style={styles.iconContainer}>
-              <Gift size={28} color="#6366f1" />
+        <Card key={wishlist.WishListID} isDark={isDark} style={styles.wishlistCard}>
+          <View style={styles.cardHeader}>
+            <View style={styles.iconBadge}>
+              <Gift size={24} color="#6366f1" />
             </View>
-            <View style={styles.wishlistHeaderText}>
-              <Text style={styles.wishlistTitle} numberOfLines={1}>
+            <View style={{ flex: 1, marginLeft: spacing[3] }}>
+              <Text variant="h4" isDark={isDark} weight="bold" numberOfLines={1}>
                 {wishlist.Title}
               </Text>
-              <View style={styles.ownerRow}>
-                <User size={14} color="#6b7280" />
-                <Text style={styles.ownerText}>{ownerName}</Text>
-              </View>
+              <Text variant="caption" color="textSecondary" isDark={isDark} style={{ marginTop: spacing[1] }}>
+                Owner · {ownerName}
+              </Text>
             </View>
           </View>
 
-          {/* Description */}
           {wishlist.Description && (
-            <Text style={styles.description} numberOfLines={2}>
+            <Text variant="body" color="textSecondary" isDark={isDark} style={{ marginTop: spacing[2] }} numberOfLines={2}>
               {wishlist.Description}
             </Text>
           )}
 
-          {/* Stats */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{itemCount}</Text>
-              <Text style={styles.statLabel}>
+              <Text variant="h3" isDark={isDark} weight="bold">
+                {itemCount}
+              </Text>
+              <Text variant="caption" color="textSecondary" isDark={isDark}>
                 {itemCount === 1 ? 'Item' : 'Items'}
               </Text>
             </View>
-            <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{reservedCount}</Text>
-              <Text style={styles.statLabel}>Reserved</Text>
+              <Text variant="h3" isDark={isDark} weight="bold">
+                {reservedCount}
+              </Text>
+              <Text variant="caption" color="textSecondary" isDark={isDark}>
+                Reserved
+              </Text>
             </View>
-            <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{purchasedCount}</Text>
-              <Text style={styles.statLabel}>Purchased</Text>
-            </View>
-          </View>
-
-          {/* Footer */}
-          <View style={styles.wishlistFooter}>
-            <View style={styles.visibilityBadge}>
-              {getVisibilityIcon(wishlist.Visibility)}
-              <Text style={styles.visibilityText}>
-                {getVisibilityLabel(wishlist.Visibility)}
+              <Text variant="h3" isDark={isDark} weight="bold">
+                {purchasedCount}
+              </Text>
+              <Text variant="caption" color="textSecondary" isDark={isDark}>
+                Purchased
               </Text>
             </View>
           </View>
-        </TouchableOpacity>
+
+          <View style={styles.footerRow}>
+            <View
+              style={[
+                styles.visibilityBadge,
+                {
+                  backgroundColor: themeColors.surfaceVariant,
+                  borderColor: themeColors.border,
+                },
+              ]}
+            >
+              {visibilityMeta?.icon}
+              <Text variant="caption" color="textSecondary" isDark={isDark} style={{ marginLeft: spacing[1] }}>
+                {visibilityMeta?.label ?? 'Family'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.showDetailsButton}
+              onPress={() =>
+                setToast({
+                  message: 'Wishlist details coming soon!',
+                  type: 'info',
+                })
+              }
+            >
+              <Text variant="caption" color="textSecondary" isDark={isDark}>
+                View details
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Card>
       );
     },
-    [handleWishlistPress]
+    [countByStatus, formatOwnerName, isDark, themeColors.border, themeColors.surfaceVariant, totalItems],
   );
 
+  if (!familyId) {
+    return (
+      <View style={[styles.emptyContainer, { backgroundColor: themeColors.background }]}>
+        <Card isDark={isDark} style={styles.emptyCard}>
+          <Gift size={48} color={themeColors.primary} />
+          <Text variant="h3" isDark={isDark} weight="bold" style={{ marginTop: spacing[2] }}>
+            Join a family to view wishlists
+          </Text>
+          <Text variant="body" color="textSecondary" isDark={isDark} style={{ marginTop: spacing[1], textAlign: 'center' }}>
+            Invite your family or accept an invitation to start sharing wishlists.
+          </Text>
+        </Card>
+      </View>
+    );
+  }
+
   if (isLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.loadingText}>Loading wishlists...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadWishlists}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (wishlists.length === 0) {
-    return (
-      <View style={styles.centerContainer}>
-        <Gift size={64} color="#9ca3af" />
-        <Text style={styles.emptyTitle}>No Wishlists Yet</Text>
-        <Text style={styles.emptyText}>
-          Create a wishlist to track gifts and items you want!
-        </Text>
-        <TouchableOpacity style={styles.addButton}>
-          <Plus size={20} color="#ffffff" />
-          <Text style={styles.addButtonText}>Create Wishlist</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <LoadingSpinner isDark={isDark} message="Loading wishlists…" />;
   }
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={wishlists}
-        renderItem={renderWishlistCard}
-        keyExtractor={(wishlist) => wishlist.WishListID.toString()}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor="#6366f1"
-          />
-        }
-      />
+    <ScrollView
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor={themeColors.primary}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      {toast && <Toast message={toast.message} type={toast.type} onHide={() => setToast(null)} />}
 
-      {/* Floating Add Button */}
-      <TouchableOpacity style={styles.fab}>
-        <Plus size={24} color="#ffffff" />
-      </TouchableOpacity>
-    </View>
+      <View style={styles.header}>
+        <View>
+          <Text variant="h2" isDark={isDark} weight="bold">
+            Wishlists
+          </Text>
+          <Text variant="body" color="textSecondary" isDark={isDark}>
+            Track gift ideas and surprises for your family.
+          </Text>
+        </View>
+        {canManage && (
+          <Button
+            title="New wishlist"
+            onPress={() => setCreateModalOpen(true)}
+            size="small"
+            isDark={isDark}
+
+          />
+        )}
+      </View>
+
+      {error && (
+        <Alert
+          type="warning"
+          title="Unable to load wishlists"
+          message={error}
+          isDark={isDark}
+          style={{ marginBottom: spacing[3] }}
+        />
+      )}
+
+      {wishlists.length === 0 ? (
+        <Card isDark={isDark} style={styles.emptyCard}>
+          <Gift size={48} color={themeColors.primary} />
+          <Text variant="h3" isDark={isDark} weight="bold" style={{ marginTop: spacing[2] }}>
+            No wishlists yet
+          </Text>
+          <Text variant="body" color="textSecondary" isDark={isDark} style={{ marginTop: spacing[1], textAlign: 'center' }}>
+            Create a wishlist to start tracking gift ideas and surprises.
+          </Text>
+          {canManage && (
+            <Button
+              title="Create wishlist"
+              onPress={() => setCreateModalOpen(true)}
+              style={{ marginTop: spacing[3] }}
+              isDark={isDark}
+
+            />
+          )}
+        </Card>
+      ) : (
+        wishlists.map(renderWishlistCard)
+      )}
+
+      <View style={{ height: spacing[8] }} />
+
+      <Modal
+        visible={createModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCreateModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { backgroundColor: themeColors.surface }]}>
+            <Text variant="h3" isDark={isDark} weight="bold" style={{ marginBottom: spacing[3] }}>
+              New wishlist
+            </Text>
+            <Input
+              label="Title"
+              value={title}
+              onChangeText={setTitle}
+              isDark={isDark}
+              placeholder="Birthday ideas, Holiday gifts..."
+              containerStyle={{ marginBottom: spacing[3] }}
+            />
+            <Input
+              label="Description (optional)"
+              value={description}
+              onChangeText={setDescription}
+              isDark={isDark}
+              placeholder="Add notes about this wishlist"
+              containerStyle={{ marginBottom: spacing[3] }}
+            />
+
+            {members.length > 0 && (
+              <View style={{ marginBottom: spacing[3] }}>
+                <Text variant="label" color="textSecondary" isDark={isDark} style={{ marginBottom: spacing[2] }}>
+                  Owner
+                </Text>
+                <View style={styles.selectorGrid}>
+                  {members.map((member) => {
+                    const name = (`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || member.email) ?? 'Family member';
+                    const active = ownerId === member.id;
+                    return (
+                      <TouchableOpacity
+                        key={member.id}
+                        style={[
+                          styles.selectorChip,
+                          {
+                            backgroundColor: active ? themeColors.primaryLight : themeColors.surfaceVariant,
+                            borderColor: active ? themeColors.primary : themeColors.border,
+                          },
+                        ]}
+                        onPress={() => setOwnerId(member.id)}
+                      >
+                        <Text
+                          variant="body"
+                          style={{
+                            color: active ? themeColors.primary : themeColors.textSecondary,
+                            fontWeight: active ? '600' : '400',
+                          }}
+                        >
+                          {name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <View style={{ marginBottom: spacing[3] }}>
+              <Text variant="label" color="textSecondary" isDark={isDark} style={{ marginBottom: spacing[2] }}>
+                Visibility
+              </Text>
+              <View style={styles.selectorGrid}>
+                {VISIBILITY_OPTIONS.map((option) => {
+                  const active = visibility === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.selectorChip,
+                        {
+                          backgroundColor: active ? themeColors.primaryLight : themeColors.surfaceVariant,
+                          borderColor: active ? themeColors.primary : themeColors.border,
+                        },
+                      ]}
+                      onPress={() => setVisibility(option.value)}
+                    >
+                      {option.icon}
+                      <Text
+                        variant="body"
+                        style={{
+                          color: active ? themeColors.primary : themeColors.textSecondary,
+                          marginLeft: spacing[1],
+                          fontWeight: active ? '600' : '400',
+                        }}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => {
+                  setCreateModalOpen(false);
+                  setTitle('');
+                  setDescription('');
+                  setOwnerId(user?.id);
+                  setVisibility('FAMILY');
+                }}
+                isDark={isDark}
+                disabled={isSubmitting}
+              />
+              <Button
+                title={isSubmitting ? 'Creating…' : 'Create'}
+                onPress={handleCreateWishlist}
+                isDark={isDark}
+                disabled={isSubmitting}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    padding: spacing[4],
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#f9fafb',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  addButton: {
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  addButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  listContent: {
-    padding: 16,
+    marginBottom: spacing[4],
   },
   wishlistCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: spacing[3],
   },
-  wishlistHeader: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  iconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.full,
     backgroundColor: '#eef2ff',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  wishlistHeaderText: {
-    flex: 1,
-  },
-  wishlistTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  ownerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ownerText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  description: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-    marginBottom: 16,
   },
   statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    marginTop: spacing[3],
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: '#e5e7eb',
-  },
-  wishlistFooter: {
+  footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: spacing[3],
   },
   visibilityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
+    borderWidth: 1,
+    borderRadius: borderRadius.base,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
   },
-  visibilityText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
+  showDetailsButton: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
   },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    backgroundColor: '#6366f1',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
+    padding: spacing[4],
+  },
+  emptyCard: {
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    padding: spacing[4],
+  },
+  selectorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  selectorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: borderRadius.base,
+    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[2],
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: spacing[4],
+  },
+  modalContent: {
+    borderRadius: borderRadius.lg,
+    padding: spacing[4],
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing[2],
+    marginTop: spacing[3],
   },
 });
 

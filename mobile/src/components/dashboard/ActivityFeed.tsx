@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
-import { spacing, lightTheme, darkTheme, fontSize } from '../../theme';
+import { spacing, lightTheme, darkTheme, fontSize, borderRadius } from '../../theme';
 import type { ActivityItem } from '../../api/dashboard';
 import type { Theme } from '../../theme';
+import {
+  CalendarDays,
+  CheckSquare,
+  MessageCircle,
+  UserPlus,
+} from 'lucide-react-native';
 
 interface ActivityFeedProps {
   activities: ActivityItem[];
@@ -12,24 +18,40 @@ interface ActivityFeedProps {
   onActivityPress?: (activity: ActivityItem) => void;
 }
 
-const getActivityIcon = (type: ActivityItem['type']): string => {
+const getActivityMeta = (theme: Theme, type: ActivityItem['type']) => {
   const icons = {
-    event: '📅',
-    task: '✓',
-    message: '💬',
-    member_joined: '👤',
+    event: {
+      Icon: CalendarDays,
+      color: theme.primary,
+      background: theme.primaryLight,
+      label: 'Event updated',
+    },
+    task: {
+      Icon: CheckSquare,
+      color: theme.success,
+      background: theme.successLight,
+      label: 'Task update',
+    },
+    message: {
+      Icon: MessageCircle,
+      color: theme.secondary,
+      background: theme.secondaryLight,
+      label: 'New message',
+    },
+    member_joined: {
+      Icon: UserPlus,
+      color: theme.accent,
+      background: theme.accentLight,
+      label: 'New member',
+    },
   };
-  return icons[type] || '📌';
-};
-
-const getActivityColor = (theme: Theme, type: ActivityItem['type']): string => {
-  const colors = {
-    event: theme.primary,
-    task: theme.success,
-    message: theme.secondary,
-    member_joined: theme.accent,
+  const fallback = {
+    Icon: MessageCircle,
+    color: theme.textSecondary,
+    background: theme.surfaceVariant,
+    label: 'Update',
   };
-  return colors[type] || theme.textSecondary;
+  return icons[type] ?? fallback;
 };
 
 const formatTimeAgo = (timestamp: string): string => {
@@ -53,9 +75,9 @@ const ActivityItemComponent: React.FC<{
   onPress?: (activity: ActivityItem) => void;
 }> = ({ item, isDark = false, onPress }) => {
   const theme = isDark ? darkTheme : lightTheme;
-  const icon = getActivityIcon(item.type);
-  const color = getActivityColor(theme, item.type);
+  const meta = useMemo(() => getActivityMeta(theme, item.type), [item.type, theme]);
   const timeAgo = formatTimeAgo(item.timestamp);
+  const { Icon, color, background, label } = meta;
 
   return (
     <Card
@@ -65,18 +87,28 @@ const ActivityItemComponent: React.FC<{
     >
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={{ fontSize: 24, marginRight: spacing[2] }}>
-            {icon}
-          </Text>
+          <View
+            style={[
+              styles.iconPill,
+              {
+                backgroundColor: background,
+              },
+            ]}
+          >
+            <Icon size={18} color={color} />
+          </View>
           <View style={styles.titleContainer}>
-            <Text variant="h4" isDark={isDark}>
-              {item.title}
-            </Text>
-            {item.actor && (
-              <Text variant="caption" color="textSecondary" isDark={isDark}>
-                by {item.actor}
+            <View style={styles.titleRow}>
+              <Text variant="h4" isDark={isDark} weight="semibold">
+                {item.title}
               </Text>
-            )}
+              <Text variant="caption" color="textTertiary" isDark={isDark}>
+                {timeAgo}
+              </Text>
+            </View>
+            <Text variant="caption" color="textSecondary" isDark={isDark}>
+              {item.actor ? `${label} · ${item.actor}` : label}
+            </Text>
           </View>
         </View>
         {item.description && (
@@ -89,14 +121,6 @@ const ActivityItemComponent: React.FC<{
             {item.description}
           </Text>
         )}
-        <Text
-          variant="caption"
-          color="textTertiary"
-          isDark={isDark}
-          style={styles.timestamp}
-        >
-          {timeAgo}
-        </Text>
       </View>
     </Card>
   );
@@ -147,15 +171,27 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: spacing[2],
   },
+  iconPill: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing[3],
+  },
   titleContainer: {
     flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing[1],
+    gap: spacing[2],
   },
   description: {
     marginLeft: spacing[8],
     marginBottom: spacing[1],
-  },
-  timestamp: {
-    marginLeft: spacing[8],
   },
   emptyContainer: {
     alignItems: 'center',

@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../api/apiClient';
 
 export interface FamilyMember {
   id: string;
@@ -40,7 +41,7 @@ interface UseFamilyReturn {
 export function useFamily(): UseFamilyReturn {
   const [family, setFamily] = useState<Family | null>(null);
   const [families, setFamilies] = useState<Family[]>([]);
-  const [activeFamilyId, setActiveFamilyId] = useState<string | null>(null);
+  const [activeFamilyId, setActiveFamilyIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,43 +49,54 @@ export function useFamily(): UseFamilyReturn {
     try {
       setIsLoading(true);
       setError(null);
+      // Call API to fetch families for current user
+      const { data } = await apiClient.get('/family');
+      // Expected shape from backend: { families: [...], activeFamilyId }
+      const { families: serverFamilies = [], activeFamilyId: serverActiveId } = data || {};
 
-      // TODO: Call API to fetch family data
-      // const response = await getMyFamily(activeFamilyId);
-      // setFamily(response);
+      // Map to local types
+      const mappedFamilies: Family[] = (serverFamilies as any[]).map((f: any) => ({
+        id: String(f.FamilyID ?? f.id ?? f.familyId),
+        name: String(f.FamilyName ?? f.name ?? 'Family'),
+        members: (f.members || f.FamilyUsers || []).map((m: any) => ({
+          id: String(m.UserID ?? m.id ?? m.userId),
+          email: m.Email ?? m.email ?? '',
+          firstName: m.FirstName ?? m.firstName,
+          lastName: m.LastName ?? m.lastName,
+          avatar: m.ProfilePhotoUrl ?? m.avatar,
+          role: (m.role ?? m.RoleName ?? 'child').toLowerCase(),
+          joinedAt: Date.parse(m.CreatedDate ?? m.joinedAt ?? new Date().toISOString()),
+        })),
+        createdAt: Date.parse(f.CreatedDate ?? f.createdAt ?? new Date().toISOString()),
+        settings: {
+          screenTimeAlertThreshold: f.settings?.screenTimeAlertThreshold,
+          approvalRequired: f.settings?.approvalRequired,
+        },
+      }));
 
-      // Mock data for now
-      if (!family) {
-        setFamily({
-          id: activeFamilyId || 'default-family',
-          name: 'Johnson Family',
-          members: [
-            {
-              id: '1',
-              email: 'parent@example.com',
-              firstName: 'John',
-              lastName: 'Johnson',
-              role: 'parent',
-              joinedAt: Date.now() - 365 * 24 * 60 * 60 * 1000,
-            },
-          ],
-          createdAt: Date.now() - 365 * 24 * 60 * 60 * 1000,
-          settings: {
-            screenTimeAlertThreshold: 80,
-            approvalRequired: true,
-          },
-        });
-      }
+  setFamilies(mappedFamilies);
+  const resolvedActiveId = serverActiveId ? String(serverActiveId) : (mappedFamilies[0]?.id ?? null);
+  setActiveFamilyIdState(resolvedActiveId);
+  const active = mappedFamilies.find((fam) => fam.id === resolvedActiveId) || mappedFamilies[0] || null;
+  setFamily(active);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load family');
     } finally {
       setIsLoading(false);
     }
-  }, [activeFamilyId, family]);
+  }, []);
 
   useEffect(() => {
+    // Run once on mount
     refetchFamily();
-  }, [refetchFamily]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setActiveFamilyId = useCallback((id: string) => {
+    setActiveFamilyIdState(id);
+    const active = families.find((f) => f.id === id) || null;
+    setFamily(active);
+  }, [families]);
 
   return {
     family,

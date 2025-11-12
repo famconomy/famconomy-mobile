@@ -3,6 +3,9 @@ import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
+import { ToastProvider } from './components/ui/ToastProvider';
+import { Linking } from 'react-native';
+import { useDeepLinkStore } from './store/deepLinkStore';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -40,6 +43,21 @@ const Drawer = createDrawerNavigator();
 const App: React.FC = () => {
   const { user, isLoading, logout } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const setInviteToken = useDeepLinkStore((s) => s.setInviteToken);
+
+  useEffect(() => {
+    const getToken = (url?: string | null) => {
+      if (!url) return;
+      try {
+        const u = new URL(url);
+        const token = u.searchParams.get('token') || undefined;
+        if (token) setInviteToken(token);
+      } catch {}
+    };
+    Linking.getInitialURL().then(getToken);
+    const sub = Linking.addEventListener('url', (e) => getToken(e.url));
+    return () => sub.remove();
+  }, [setInviteToken]);
 
   // Debug logging
   console.log('=== APP RENDER ===');
@@ -82,6 +100,7 @@ const App: React.FC = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <ToastProvider isDark={false}>
         <NavigationContainer>
           <Drawer.Navigator
             drawerContent={(props) => (
@@ -193,6 +212,7 @@ const App: React.FC = () => {
           {/* LinZ Chat Floating Button */}
           <LinZChat />
         </NavigationContainer>
+        </ToastProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

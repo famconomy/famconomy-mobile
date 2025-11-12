@@ -1,8 +1,16 @@
 import React from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { Text } from '../ui/Text';
 import { Card } from '../ui/Card';
-import { spacing, lightTheme, darkTheme, fontSize, fontWeight, shadows } from '../../theme';
+import {
+  spacing,
+  lightTheme,
+  darkTheme,
+  fontSize,
+  fontWeight,
+  shadows,
+  borderRadius,
+} from '../../theme';
 import type { LeaderboardEntry } from '../../api/dashboard';
 import type { Theme } from '../../theme';
 
@@ -37,45 +45,84 @@ const LeaderboardItem: React.FC<{
   isDark?: boolean;
 }> = ({ entry, isDark = false }) => {
   const theme = isDark ? darkTheme : lightTheme;
-  const medal = getMedalEmoji(entry.rank);
   const rankColor = getRankColor(theme, entry.rank);
+  const initials = entry.userName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
+  const hasAvatar = Boolean(entry.avatar);
+  const accentBackground =
+    entry.rank === 1 ? theme.primaryLight : entry.rank === 2 ? theme.secondaryLight : theme.surfaceVariant;
+  const accentColor =
+    entry.rank === 1 ? theme.primary : entry.rank === 2 ? theme.secondary : theme.textSecondary;
 
   return (
     <View
       style={[
         styles.item,
         {
-          backgroundColor: theme.surfaceVariant,
           borderBottomColor: theme.border,
+          backgroundColor: isDark ? theme.surfaceVariant : theme.surface,
         },
       ]}
     >
-      <Text
-        style={{
-          fontSize: 24,
-          marginRight: spacing[3],
-          color: rankColor,
-          minWidth: 40,
-        }}
+      <View
+        style={[
+          styles.rankBadge,
+          {
+            backgroundColor: accentBackground,
+          },
+        ]}
       >
-        {medal}
-      </Text>
-      <View style={styles.nameContainer}>
-        <Text variant="h4" isDark={isDark} weight="semibold">
-          {entry.userName}
+        <Text
+          variant="body"
+          weight="bold"
+          style={{
+            color: accentColor,
+          }}
+        >
+          {entry.rank <= 3 ? getMedalEmoji(entry.rank) : `#${entry.rank}`}
         </Text>
       </View>
-      <Text
-        variant="h3"
-        isDark={isDark}
-        weight="bold"
-        style={{ color: theme.primary }}
-      >
-        {entry.points}
-      </Text>
-      <Text variant="caption" color="textSecondary" isDark={isDark}>
-        pts
-      </Text>
+      {hasAvatar ? (
+        <Image source={{ uri: entry.avatar }} style={styles.avatar} />
+      ) : (
+        <View
+          style={[
+            styles.avatarFallback,
+            {
+              backgroundColor: theme.surfaceVariant,
+            },
+          ]}
+        >
+          <Text variant="body" weight="semibold" style={{ color: theme.textSecondary }}>
+            {initials || '?'}
+          </Text>
+        </View>
+      )}
+      <View style={styles.nameContainer}>
+        <Text variant="h4" isDark={isDark} weight="semibold" numberOfLines={1}>
+          {entry.userName}
+        </Text>
+        <Text variant="caption" color="textSecondary" isDark={isDark}>
+          Total points
+        </Text>
+      </View>
+      <View style={styles.scoreContainer}>
+        <Text
+          variant="h3"
+          isDark={isDark}
+          weight="bold"
+          style={{ color: theme.primary }}
+        >
+          {entry.points}
+        </Text>
+        <Text variant="caption" color="textSecondary" isDark={isDark}>
+          pts
+        </Text>
+      </View>
     </View>
   );
 };
@@ -121,6 +168,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     ...shadows.card,
+    backgroundColor: 'transparent',
   },
   item: {
     flexDirection: 'row',
@@ -128,10 +176,34 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     paddingHorizontal: spacing[4],
     borderBottomWidth: 1,
+    gap: spacing[3],
+  },
+  rankBadge: {
+    minWidth: 48,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.full,
+  },
+  avatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   nameContainer: {
     flex: 1,
     marginRight: spacing[2],
+  },
+  scoreContainer: {
+    alignItems: 'flex-end',
   },
   emptyContainer: {
     alignItems: 'center',

@@ -1,0 +1,87 @@
+#ifndef RN_CHAR_TRAITS_FIX_PCH
+#define RN_CHAR_TRAITS_FIX_PCH
+
+#ifdef FMT_USE_CHAR8_T
+#undef FMT_USE_CHAR8_T
+#endif
+#define FMT_USE_CHAR8_T 0
+
+#ifdef __cpp_char8_t
+#undef __cpp_char8_t
+#endif
+
+#ifdef __cplusplus
+#include <string>
+
+namespace std {
+template <>
+struct char_traits<unsigned char> : char_traits<char> {
+  using base = char_traits<char>;
+  using char_type = unsigned char;
+  using int_type = base::int_type;
+  using off_type = base::off_type;
+  using pos_type = base::pos_type;
+  using state_type = base::state_type;
+
+  static void assign(char_type& r, char_type a) { r = a; }
+
+  static char_type* assign(char_type* p, size_t count, char_type c) {
+    base::assign(reinterpret_cast<char*>(p), count,
+                 static_cast<char>(c));
+    return p;
+  }
+
+  static constexpr bool eq(char_type lhs, char_type rhs) { return lhs == rhs; }
+  static constexpr bool lt(char_type lhs, char_type rhs) { return lhs < rhs; }
+
+  static int compare(const char_type* s1, const char_type* s2, size_t n) {
+    return base::compare(reinterpret_cast<const char*>(s1),
+                         reinterpret_cast<const char*>(s2), n);
+  }
+
+  static size_t length(const char_type* s) {
+    return base::length(reinterpret_cast<const char*>(s));
+  }
+
+  static const char_type* find(const char_type* s, size_t n, char_type a) {
+    const char* result = base::find(reinterpret_cast<const char*>(s), n,
+                                    static_cast<char>(a));
+    return result ? reinterpret_cast<const char_type*>(result) : nullptr;
+  }
+
+  static char_type* move(char_type* dest, const char_type* src, size_t n) {
+    base::move(reinterpret_cast<char*>(dest),
+               reinterpret_cast<const char*>(src), n);
+    return dest;
+  }
+
+  static char_type* copy(char_type* dest, const char_type* src, size_t n) {
+    base::copy(reinterpret_cast<char*>(dest),
+               reinterpret_cast<const char*>(src), n);
+    return dest;
+  }
+
+  static constexpr int_type to_int_type(char_type c) {
+    return base::to_int_type(static_cast<char>(c));
+  }
+
+  static constexpr char_type to_char_type(int_type c) {
+    return static_cast<char_type>(base::to_char_type(c));
+  }
+
+  static constexpr bool eq_int_type(int_type lhs, int_type rhs) {
+    return base::eq_int_type(lhs, rhs);
+  }
+
+  static constexpr int_type eof() { return base::eof(); }
+  static constexpr int_type not_eof(int_type c) { return base::not_eof(c); }
+};
+}  // namespace std
+#endif  // __cplusplus
+
+#ifdef __OBJC__
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#endif  // __OBJC__
+
+#endif  // RN_CHAR_TRAITS_FIX_PCH

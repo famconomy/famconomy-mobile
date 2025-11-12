@@ -1,374 +1,432 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  StyleSheet,
+  View,
   TextInput,
+  TouchableOpacity,
   Image,
-  Alert,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Linking,
 } from 'react-native';
-import { BookOpen, PlayCircle, MousePointerClick, Search } from 'lucide-react-native';
-import { resources, Resource, searchResources } from '../../data/resources';
+import { BookOpen, PlayCircle, MousePointerClick, Search, Star } from 'lucide-react-native';
+import { useAppStore } from '../../store/appStore';
+import { spacing, lightTheme, darkTheme, borderRadius, fontSize } from '../../theme';
+import { Text } from '../../components/ui/Text';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Toast } from '../../components/ui/Toast';
+import { resources as staticResources, searchResources, type Resource } from '../../data/resources';
 
-export const ResourcesScreen = () => {
-  const [activeTab, setActiveTab] = useState<'kids' | 'parents'>('kids');
+type ResourceTab = 'kids' | 'parents';
+type ResourceFilter = 'all' | Resource['type'];
+
+const ICON_BY_TYPE: Record<Resource['type'], React.ReactNode> = {
+  article: <BookOpen size={20} color="#6366f1" />,
+  video: <PlayCircle size={20} color="#10b981" />,
+  interactive: <MousePointerClick size={20} color="#f59e0b" />,
+};
+
+const ResourcesScreen: React.FC = () => {
+  const { theme } = useAppStore();
+  const isDark = theme === 'dark';
+  const themeColors = isDark ? darkTheme : lightTheme;
+
+  const [activeTab, setActiveTab] = useState<ResourceTab>('kids');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<'all' | Resource['type']>('all');
+  const [selectedType, setSelectedType] = useState<ResourceFilter>('all');
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
-  const filteredResources = searchQuery
-    ? searchResources(searchQuery, activeTab)
-    : resources.filter(r => {
-        const matchesCategory = r.category === activeTab;
-        const matchesType = selectedType === 'all' || r.type === selectedType;
-        return matchesCategory && matchesType;
-      });
+  const filteredResources = useMemo(() => {
+    const base = searchQuery
+      ? searchResources(searchQuery, activeTab)
+      : staticResources.filter((resource) => resource.category === activeTab);
 
-  const handleResourcePress = (resource: Resource) => {
-    // TODO: Navigate to ResourceDetailsScreen once created
-    Alert.alert(
-      resource.title,
-      resource.summary + '\n\n' + (resource.content || 'Full content coming soon!'),
-      [{ text: 'OK' }]
+    if (selectedType === 'all') {
+      return base;
+    }
+    return base.filter((resource) => resource.type === selectedType);
+  }, [activeTab, selectedType, searchQuery]);
+
+  const handleFavoriteToggle = (resourceId: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(resourceId)) {
+        next.delete(resourceId);
+        setToast({ message: 'Removed from favorites', type: 'info' });
+      } else {
+        next.add(resourceId);
+        setToast({ message: 'Added to favorites', type: 'success' });
+      }
+      return next;
+    });
+  };
+
+  const openExternalLink = async (resource: Resource) => {
+    if (!resource.url) {
+      setToast({ message: 'External link coming soon!', type: 'info' });
+      return;
+    }
+    try {
+      await Linking.openURL(resource.url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to open link.';
+      setToast({ message, type: 'error' });
+    }
+  };
+
+  const renderResourceCard = (resource: Resource) => {
+    const typeIcon = ICON_BY_TYPE[resource.type];
+    const isFavorite = favorites.has(resource.id);
+
+    return (
+      <Card key={resource.id} isDark={isDark} style={styles.card}>
+        {resource.thumbnail ? (
+          <Image source={{ uri: resource.thumbnail }} style={styles.thumbnail} />
+        ) : (
+          <View
+            style={[
+              styles.thumbnail,
+              {
+                backgroundColor: themeColors.surfaceVariant,
+              },
+            ]}
+          />
+        )}
+        <View style={styles.cardBody}>
+          <View style={styles.cardHeader}>
+            <View style={styles.typeBadge}>
+              {typeIcon}
+              <Text
+                variant="caption"
+                color="textSecondary"
+                isDark={isDark}
+                style={{ marginLeft: spacing[1], textTransform: 'uppercase' }}
+              >
+                {resource.type}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => handleFavoriteToggle(resource.id)} activeOpacity={0.8}>
+              <Star size={20} color={isFavorite ? '#facc15' : themeColors.textSecondary} fill={isFavorite ? '#facc15' : 'transparent'} />
+            </TouchableOpacity>
+          </View>
+
+          <Text variant="h4" isDark={isDark} weight="bold" style={{ marginBottom: spacing[1] }}>
+            {resource.title}
+          </Text>
+          <Text variant="body" color="textSecondary" isDark={isDark} numberOfLines={3}>
+            {resource.summary}
+          </Text>
+
+          <View style={styles.tagList}>
+            {resource.tags.slice(0, 4).map((tag) => (
+              <View
+                key={`${resource.id}-${tag}`}
+                style={[
+                  styles.tag,
+                  {
+                    backgroundColor: themeColors.surfaceVariant,
+                    borderColor: themeColors.border,
+                  },
+                ]}
+              >
+                <Text variant="caption" color="textSecondary" isDark={isDark}>
+                  #{tag}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.cardActions}>
+            <Button
+              title="Preview"
+              variant="outline"
+              size="small"
+              onPress={() => setSelectedResource(resource)}
+              isDark={isDark}
+            />
+            <Button
+              title={resource.url ? 'Open resource' : 'External link coming soon'}
+              size="small"
+              onPress={() => openExternalLink(resource)}
+              disabled={!resource.url}
+              isDark={isDark}
+            />
+          </View>
+        </View>
+      </Card>
     );
   };
 
-  const getTypeIcon = (type: Resource['type']) => {
-    switch (type) {
-      case 'article':
-        return <BookOpen size={20} color="#3b82f6" />;
-      case 'video':
-        return <PlayCircle size={20} color="#10b981" />;
-      case 'interactive':
-        return <MousePointerClick size={20} color="#f59e0b" />;
-    }
-  };
-
-  const getTypeColor = (type: Resource['type']) => {
-    switch (type) {
-      case 'article':
-        return '#3b82f6';
-      case 'video':
-        return '#10b981';
-      case 'interactive':
-        return '#f59e0b';
-    }
-  };
+  const renderFavoriteEmpty = () => (
+    <Card isDark={isDark} style={styles.emptyCard}>
+      <BookOpen size={48} color={themeColors.primary} />
+      <Text variant="h3" isDark={isDark} weight="bold" style={{ marginTop: spacing[2] }}>
+        No resources found
+      </Text>
+      <Text
+        variant="body"
+        color="textSecondary"
+        isDark={isDark}
+        style={{ marginTop: spacing[1], textAlign: 'center' }}
+      >
+        Try a different search or filter to explore more content.
+      </Text>
+    </Card>
+  );
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
+    <ScrollView
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {toast && <Toast message={toast.message} type={toast.type} onHide={() => setToast(null)} />}
+
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Educational Resources</Text>
-        <Text style={styles.headerSubtitle}>
-          Learn together as a family
+        <Text variant="h2" isDark={isDark} weight="bold">
+          Educational Resources
+        </Text>
+        <Text variant="body" color="textSecondary" isDark={isDark}>
+          Learn together as a family.
         </Text>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#94a3b8" style={styles.searchIcon} />
+      <View
+        style={[
+          styles.searchRow,
+          {
+            backgroundColor: themeColors.surface,
+            borderColor: themeColors.border,
+          },
+        ]}
+      >
+        <Search size={18} color={themeColors.textSecondary} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: themeColors.text }]}
           placeholder="Search resources..."
+          placeholderTextColor={themeColors.textTertiary}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor="#94a3b8"
         />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'kids' && styles.tabActive]}
-          onPress={() => setActiveTab('kids')}
-        >
-          <Text style={[styles.tabText, activeTab === 'kids' && styles.tabTextActive]}>
-            For Kids
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'parents' && styles.tabActive]}
-          onPress={() => setActiveTab('parents')}
-        >
-          <Text style={[styles.tabText, activeTab === 'parents' && styles.tabTextActive]}>
-            For Parents
-          </Text>
-        </TouchableOpacity>
+      <View style={[styles.tabRow, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
+        {(['kids', 'parents'] as const).map((tab) => {
+          const active = activeTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[
+                styles.tabButton,
+                {
+                  borderBottomColor: active ? themeColors.primary : 'transparent',
+                },
+              ]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.8}
+            >
+              <Text
+                variant="body"
+                style={{
+                  color: active ? themeColors.primary : themeColors.textSecondary,
+                  fontWeight: active ? '600' : '400',
+                }}
+              >
+                {tab === 'kids' ? 'For Kids' : 'For Parents'}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Type Filter */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.typeFilter}
-        contentContainerStyle={styles.typeFilterContent}
+        style={{ marginTop: spacing[3] }}
+        contentContainerStyle={{ paddingHorizontal: spacing[4], gap: spacing[2] }}
       >
-        <TouchableOpacity
-          style={[styles.typeFilterButton, selectedType === 'all' && styles.typeFilterButtonActive]}
-          onPress={() => setSelectedType('all')}
-        >
-          <Text style={[styles.typeFilterText, selectedType === 'all' && styles.typeFilterTextActive]}>
-            All Types
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.typeFilterButton, selectedType === 'article' && styles.typeFilterButtonActive]}
-          onPress={() => setSelectedType('article')}
-        >
-          <BookOpen size={16} color={selectedType === 'article' ? '#fff' : '#3b82f6'} />
-          <Text style={[styles.typeFilterText, selectedType === 'article' && styles.typeFilterTextActive]}>
-            Articles
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.typeFilterButton, selectedType === 'video' && styles.typeFilterButtonActive]}
-          onPress={() => setSelectedType('video')}
-        >
-          <PlayCircle size={16} color={selectedType === 'video' ? '#fff' : '#10b981'} />
-          <Text style={[styles.typeFilterText, selectedType === 'video' && styles.typeFilterTextActive]}>
-            Videos
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.typeFilterButton, selectedType === 'interactive' && styles.typeFilterButtonActive]}
-          onPress={() => setSelectedType('interactive')}
-        >
-          <MousePointerClick size={16} color={selectedType === 'interactive' ? '#fff' : '#f59e0b'} />
-          <Text style={[styles.typeFilterText, selectedType === 'interactive' && styles.typeFilterTextActive]}>
-            Interactive
-          </Text>
-        </TouchableOpacity>
+        {(['all', 'article', 'video', 'interactive'] as const).map((filter) => {
+          const active = selectedType === filter;
+          return (
+            <TouchableOpacity
+              key={filter}
+              style={[
+                styles.filterChip,
+                {
+                  backgroundColor: active ? themeColors.primaryLight : themeColors.surface,
+                  borderColor: active ? themeColors.primary : themeColors.border,
+                },
+              ]}
+              onPress={() => setSelectedType(filter)}
+              activeOpacity={0.85}
+            >
+              <Text
+                variant="body"
+                style={{
+                  color: active ? themeColors.primary : themeColors.textSecondary,
+                  fontWeight: active ? '600' : '400',
+                }}
+              >
+                {filter === 'all'
+                  ? 'All types'
+                  : `${filter.charAt(0).toUpperCase()}${filter.slice(1)}`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
-      {/* Resources List */}
-      <ScrollView style={styles.content}>
-        {filteredResources.length === 0 ? (
-          <View style={styles.emptyState}>
-            <BookOpen size={48} color="#94a3b8" />
-            <Text style={styles.emptyStateText}>No resources found</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Try a different search or filter
+      <View style={{ padding: spacing[4], gap: spacing[3] }}>
+        {filteredResources.length === 0
+          ? renderFavoriteEmpty()
+          : filteredResources.map(renderResourceCard)}
+      </View>
+
+      <Modal
+        visible={Boolean(selectedResource)}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedResource(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { backgroundColor: themeColors.surface }]}>
+            <Text variant="h3" isDark={isDark} weight="bold">
+              {selectedResource?.title}
             </Text>
+            <Text variant="body" color="textSecondary" isDark={isDark} style={{ marginTop: spacing[2] }}>
+              {selectedResource?.summary}
+            </Text>
+            {selectedResource?.content && (
+              <ScrollView style={{ marginTop: spacing[3], maxHeight: 240 }}>
+                <Text variant="body" isDark={isDark}>
+                  {selectedResource.content}
+                </Text>
+              </ScrollView>
+            )}
+            <View style={styles.modalButtons}>
+              <Button
+                title={selectedResource?.url ? 'Open resource' : 'External link coming soon'}
+                onPress={() => selectedResource && openExternalLink(selectedResource)}
+                disabled={!selectedResource?.url}
+                isDark={isDark}
+              />
+              <Button
+                title="Close"
+                variant="outline"
+                onPress={() => setSelectedResource(null)}
+                isDark={isDark}
+              />
+            </View>
           </View>
-        ) : (
-          <View style={styles.resourcesList}>
-            {filteredResources.map((resource) => (
-              <TouchableOpacity
-                key={resource.id}
-                style={styles.resourceCard}
-                onPress={() => handleResourcePress(resource)}
-              >
-                <Image
-                  source={{ uri: resource.thumbnail }}
-                  style={styles.resourceImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.resourceContent}>
-                  <View style={styles.resourceHeader}>
-                    {getTypeIcon(resource.type)}
-                    <Text style={[styles.resourceType, { color: getTypeColor(resource.type) }]}>
-                      {resource.type.toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={styles.resourceTitle}>{resource.title}</Text>
-                  <Text style={styles.resourceSummary} numberOfLines={2}>
-                    {resource.summary}
-                  </Text>
-                  <View style={styles.resourceTags}>
-                    {resource.tags.slice(0, 3).map((tag) => (
-                      <View key={tag} style={styles.tag}>
-                        <Text style={styles.tagText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <View style={{ height: spacing[8] }} />
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   header: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    padding: spacing[4],
+    paddingBottom: spacing[2],
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1e293b',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  searchContainer: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  searchIcon: {
-    marginRight: 8,
+    marginHorizontal: spacing[4],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderWidth: 1,
+    borderRadius: borderRadius.lg,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#1e293b',
+    marginLeft: spacing[2],
+    fontSize: fontSize.base,
   },
-  tabs: {
+  tabRow: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
   },
-  tab: {
+  tabButton: {
     flex: 1,
-    paddingVertical: 16,
     alignItems: 'center',
+    paddingVertical: spacing[3],
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
   },
-  tabActive: {
-    borderBottomColor: '#8b5cf6',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  tabTextActive: {
-    color: '#8b5cf6',
-  },
-  typeFilter: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  typeFilterContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  typeFilterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+  filterChip: {
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#fff',
-    marginRight: 8,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
   },
-  typeFilterButtonActive: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#8b5cf6',
-  },
-  typeFilterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b',
-  },
-  typeFilterTextActive: {
-    color: '#fff',
-  },
-  content: {
-    flex: 1,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 48,
-    marginTop: 64,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748b',
-    marginTop: 16,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  resourcesList: {
-    padding: 16,
-  },
-  resourceCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+  card: {
     overflow: 'hidden',
   },
-  resourceImage: {
+  thumbnail: {
     width: '100%',
     height: 180,
-    backgroundColor: '#e2e8f0',
   },
-  resourceContent: {
-    padding: 16,
+  cardBody: {
+    padding: spacing[3],
+    gap: spacing[2],
   },
-  resourceHeader: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing[1],
   },
-  resourceType: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  resourceTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  resourceSummary: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  resourceTags: {
+  tagList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: spacing[1],
   },
   tag: {
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
   },
-  tagText: {
-    fontSize: 12,
-    color: '#64748b',
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing[2],
+  },
+  emptyCard: {
+    alignItems: 'center',
+    padding: spacing[6],
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: spacing[4],
+  },
+  modalContent: {
+    borderRadius: borderRadius.lg,
+    padding: spacing[4],
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing[2],
+    marginTop: spacing[3],
   },
 });
 

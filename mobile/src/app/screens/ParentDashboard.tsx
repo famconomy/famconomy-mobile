@@ -50,6 +50,19 @@ export const ParentDashboard: React.FC = () => {
     { label: 'Schedule Pause', icon: '🕒', onPress: () => {} },
   ];
 
+  interface StatCardProps {
+    label: string;
+    value: number;
+    highlight?: boolean;
+  }
+
+  const StatCard: React.FC<StatCardProps> = ({ label, value, highlight }) => (
+    <View style={[styles.statCard, highlight && styles.statCardHighlight]}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+
   const [children, setChildren] = useState<ChildSummary[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalChildren: 0,
@@ -246,18 +259,7 @@ export const ParentDashboard: React.FC = () => {
   );
 };
 
-interface StatCardProps {
-  label: string;
-  value: number;
-  highlight?: boolean;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ label, value, highlight }) => (
-  <View style={[styles.statCard, highlight && styles.statCardHighlight]}>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+// StatCard already declared above; remove duplicate
 
 const styles = StyleSheet.create({
   container: {
@@ -408,18 +410,7 @@ const styles = StyleSheet.create({
   },
 });
 
-interface StatCardProps {
-  label: string;
-  value: number;
-  highlight?: boolean;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ label, value, highlight }) => (
-  <View style={[styles.statCard, highlight && styles.statCardHighlight]}>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+// Duplicate StatCard removed
 
 interface QuickActionButtonProps {
   label: string;

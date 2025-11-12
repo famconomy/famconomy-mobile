@@ -13,7 +13,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import { spacing, lightTheme, darkTheme, fontSize, fontWeight } from '../../theme';
-import type { Task } from '../../types';
+import type { Task, TaskPriority } from '../../types';
 import type { CreateTaskRequest, UpdateTaskRequest } from '../../api/tasks';
 
 interface TaskModalProps {
@@ -28,6 +28,7 @@ interface TaskModalProps {
 const CATEGORIES = ['chores', 'homework', 'shopping', 'activities', 'other'] as const;
 const RECURRENCE_OPTIONS = ['none', 'daily', 'weekly', 'monthly'] as const;
 const REWARD_TYPES = ['points', 'screentime', 'currency'] as const;
+const PRIORITY_OPTIONS: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 
 export const TaskModal: React.FC<TaskModalProps> = ({
   visible,
@@ -48,6 +49,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [rewardType, setRewardType] = useState<'points' | 'screentime' | 'currency'>('points');
   const [rewardValue, setRewardValue] = useState('');
   const [recurring, setRecurring] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [priority, setPriority] = useState<TaskPriority>('medium');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -55,12 +57,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (isEditing && task) {
       setTitle(task.title);
       setDescription(task.description || '');
-      setDueDate(task.dueDate || '');
+      let normalizedDueDate = '';
+      if (typeof task.dueDate === 'string') {
+        normalizedDueDate = task.dueDate.slice(0, 10);
+      } else if (task.dueDate && typeof task.dueDate === 'object' && typeof (task.dueDate as Date).toISOString === 'function') {
+        normalizedDueDate = (task.dueDate as Date).toISOString().slice(0, 10);
+      }
+      setDueDate(normalizedDueDate);
       setCategory(task.category as any);
       setAssignedTo(task.assignedToUserId || '');
       setRewardType((task.rewardType as any) || 'points');
       setRewardValue(task.rewardValue?.toString() || '');
       setRecurring((task.recurring as any) || 'none');
+      setPriority(task.priority ?? 'medium');
     } else {
       resetForm();
     }
@@ -75,6 +84,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setRewardType('points');
     setRewardValue('');
     setRecurring('none');
+    setPriority('medium');
     setErrors({});
   };
 
@@ -107,6 +117,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         rewardType: rewardValue ? (rewardType as any) : undefined,
         rewardValue: rewardValue ? Number(rewardValue) : undefined,
         recurring,
+        priority,
       };
 
       await onSave(data);
@@ -257,6 +268,48 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       </Text>
                     </TouchableOpacity>
                   ))}
+                </View>
+              </View>
+
+              {/* Priority */}
+              <View style={styles.formGroup}>
+                <Text variant="label" isDark={isDark} style={styles.label}>
+                  Priority
+                </Text>
+                <View style={styles.buttonGroup}>
+                  {PRIORITY_OPTIONS.map((value) => {
+                    const isActive = priority === value;
+                    const palette =
+                      value === 'urgent'
+                        ? { background: theme.error, text: '#fff' }
+                        : value === 'high'
+                        ? { background: theme.warning, text: '#fff' }
+                        : value === 'medium'
+                        ? { background: theme.secondary, text: '#fff' }
+                        : { background: theme.surfaceVariant, text: theme.textSecondary };
+                    return (
+                      <TouchableOpacity
+                        key={value}
+                        onPress={() => setPriority(value)}
+                        style={[
+                          styles.priorityButton,
+                          {
+                            backgroundColor: isActive ? palette.background : theme.surfaceVariant,
+                            borderColor: isActive ? palette.background : theme.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          variant="caption"
+                          style={{
+                            color: isActive ? palette.text : theme.textSecondary,
+                          }}
+                        >
+                          {value.charAt(0).toUpperCase() + value.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
 
@@ -454,6 +507,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
+  },
+  priorityButton: {
+    borderRadius: 8,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderWidth: 1,
   },
   rewardSection: {
     marginBottom: spacing[4],

@@ -1,6 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import * as dashboardApi from '../api/dashboard';
-import type { DashboardResponse, ActivityItem, LeaderboardEntry } from '../api/dashboard';
+import type {
+  DashboardResponse,
+  ActivityItem,
+  LeaderboardEntry,
+  DashboardEventPreview,
+  DashboardTaskPreview,
+  DashboardMessagePreview,
+  DashboardMemberPreview,
+} from '../api/dashboard';
 
 interface UseDashboardOptions {
   familyId?: string;
@@ -13,11 +21,14 @@ interface UseDashboardReturn {
   stats: Omit<DashboardResponse, 'leaderboard' | 'recentActivity'> | null;
   activity: ActivityItem[];
   leaderboard: LeaderboardEntry[];
+  eventPreviews: DashboardEventPreview[];
+  taskPreviews: DashboardTaskPreview[];
+  messagePreviews: DashboardMessagePreview[];
+  memberPreviews: DashboardMemberPreview[];
   isLoading: boolean;
   isRefreshing: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
-  refreshStats: () => Promise<void>;
 }
 
 /**
@@ -35,69 +46,127 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   const [stats, setStats] = useState<Omit<DashboardResponse, 'leaderboard' | 'recentActivity'> | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [eventPreviews, setEventPreviews] = useState<DashboardEventPreview[]>([]);
+  const [taskPreviews, setTaskPreviews] = useState<DashboardTaskPreview[]>([]);
+  const [messagePreviews, setMessagePreviews] = useState<DashboardMessagePreview[]>([]);
+  const [memberPreviews, setMemberPreviews] = useState<DashboardMemberPreview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const hasLoadedRef = useRef(false);
 
-  const fetchData = useCallback(async () => {
-    if (!familyId) {
-      console.log('useDashboard: No familyId provided, using mock data');
-      // Provide mock data for demo purposes
-      setData({
-        familyName: 'Demo Family',
-        familyMantra: 'Together we grow stronger! 💪',
-        upcomingEvents: 2,
-        pendingTasks: 5,
-        unreadMessages: 3,
-        activeMembers: 4,
-        familyValues: ['Honesty', 'Teamwork', 'Gratitude'],
-        recentActivity: [],
-        leaderboard: [],
-      });
+  const resetStateForNoFamily = () => {
+    setData(null);
+    setStats(null);
+    setActivity([]);
+    setLeaderboard([]);
+    setIsLoading(false);
+    setIsRefreshing(false);
+    setError(null);
+    setEventPreviews([]);
+    setTaskPreviews([]);
+    setMessagePreviews([]);
+    setMemberPreviews([]);
+    hasLoadedRef.current = false;
+  };
+
+  const applyDashboardData = (dashboardData: DashboardResponse | null) => {
+    if (!dashboardData) {
+      setData(null);
+      setStats(null);
       setActivity([]);
       setLeaderboard([]);
-      setIsLoading(false);
+      setEventPreviews([]);
+      setTaskPreviews([]);
+      setMessagePreviews([]);
+      setMemberPreviews([]);
+      return;
+    }
+    setData(dashboardData);
+    setActivity(Array.isArray(dashboardData.recentActivity) ? dashboardData.recentActivity : []);
+    setLeaderboard(Array.isArray(dashboardData.leaderboard) ? dashboardData.leaderboard : []);
+    setEventPreviews(
+      Array.isArray(dashboardData.upcomingEventPreviews)
+        ? dashboardData.upcomingEventPreviews
+        : [],
+    );
+    setTaskPreviews(
+      Array.isArray(dashboardData.pendingTaskPreviews)
+        ? dashboardData.pendingTaskPreviews
+        : [],
+    );
+    setMessagePreviews(
+      Array.isArray(dashboardData.unreadMessagePreviews)
+        ? dashboardData.unreadMessagePreviews
+        : [],
+    );
+    setMemberPreviews(
+      Array.isArray(dashboardData.activeMemberPreviews)
+        ? dashboardData.activeMemberPreviews
+        : [],
+    );
+    setStats({
+      upcomingEvents: dashboardData.upcomingEvents,
+      pendingTasks: dashboardData.pendingTasks,
+      unreadMessages: dashboardData.unreadMessages,
+      activeMembers: dashboardData.activeMembers,
+      familyName: dashboardData.familyName,
+      familyMantra: dashboardData.familyMantra,
+      familyValues: dashboardData.familyValues,
+      upcomingEventPreviews: dashboardData.upcomingEventPreviews ?? [],
+      pendingTaskPreviews: dashboardData.pendingTaskPreviews ?? [],
+      unreadMessagePreviews: dashboardData.unreadMessagePreviews ?? [],
+      activeMemberPreviews: dashboardData.activeMemberPreviews ?? [],
+    });
+  };
+
+  const fetchData = useCallback(async (opts?: { source?: 'initial' | 'refresh' | 'interval' }) => {
+    if (!familyId) {
+      // No active family yet; expose empty state to UI
+      resetStateForNoFamily();
       return;
     }
 
+    const source = opts?.source ?? 'initial';
+    const shouldShowInitialLoading = !hasLoadedRef.current && source === 'initial';
+
     try {
-      setIsLoading(true);
+      if (shouldShowInitialLoading) {
+        setIsLoading(true);
+      }
+      if (source === 'refresh') {
+        setIsRefreshing(true);
+      }
+
       setError(null);
       const dashboardData = await dashboardApi.getDashboardData(familyId);
-      setData(dashboardData);
-      setActivity(dashboardData.recentActivity || []);
-      setLeaderboard(dashboardData.leaderboard || []);
+      applyDashboardData(dashboardData);
+      hasLoadedRef.current = true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
       setError(error);
       console.warn('Failed to fetch dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [familyId]);
-
-  const refreshStats = useCallback(async () => {
-    if (!familyId) return;
-
-    try {
-      setIsRefreshing(true);
-      const statsData = await dashboardApi.getDashboardStats(familyId);
-      setStats(statsData);
-    } catch (err) {
-      console.warn('Failed to refresh dashboard stats:', err);
+      if (!hasLoadedRef.current) {
+        applyDashboardData(null);
+      }
     } finally {
       setIsRefreshing(false);
+      if (shouldShowInitialLoading) {
+        setIsLoading(false);
+      }
     }
   }, [familyId]);
 
   const refetch = useCallback(async () => {
-    await fetchData();
-    await refreshStats();
-  }, [fetchData, refreshStats]);
+    await fetchData({ source: 'refresh' });
+  }, [fetchData]);
 
   // Initial fetch
   useEffect(() => {
-    fetchData();
+    fetchData({ source: 'initial' });
+    return () => {
+      hasLoadedRef.current = false;
+    };
   }, [fetchData]);
 
   // Auto-refresh interval
@@ -105,21 +174,26 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     if (!autoRefresh || !familyId) return;
 
     const interval = setInterval(() => {
-      refreshStats();
+      fetchData({ source: 'interval' }).catch(() => {
+        // interval fetch errors already handled in hook state
+      });
     }, refreshInterval);
 
     return () => clearInterval(interval);
-  }, [autoRefresh, familyId, refreshInterval, refreshStats]);
+  }, [autoRefresh, familyId, refreshInterval, fetchData]);
 
   return {
     data,
     stats,
     activity,
     leaderboard,
+    eventPreviews,
+    taskPreviews,
+    messagePreviews,
+    memberPreviews,
     isLoading,
     isRefreshing,
     error,
     refetch,
-    refreshStats,
   };
 };

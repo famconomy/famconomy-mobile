@@ -5,10 +5,11 @@ export type UserStatus = 'active' | 'inactive' | 'pending';
 export type TaskStatus = 'pending' | 'in_progress' | 'completed';
 export type TaskCategory = 'chores' | 'homework' | 'shopping' | 'activities' | 'other';
 export type RewardType = 'screentime' | 'points' | 'currency';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
 export type MessageType = 'direct' | 'group';
-export type MessageStatus = 'sent' | 'delivered' | 'read';
-export type BudgetPeriod = 'weekly' | 'monthly' | 'yearly';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+export type BudgetPeriod = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 export type Visibility = 'FAMILY' | 'LINK';
 export type MealStatus = 'SUGGESTED' | 'APPROVED' | 'ARCHIVED';
 export type MealSlot = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
@@ -17,6 +18,8 @@ export type MealSlot = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
 export interface User {
   id: string;
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   role: UserRole;
   status: UserStatus;
@@ -26,6 +29,11 @@ export interface User {
   lastLogin: string | null;
   phoneNumber?: string;
   smsEnabled?: boolean;
+  preferences?: {
+    pushNotificationsEnabled?: boolean;
+    emailNotificationsEnabled?: boolean;
+    themePreference?: 'light' | 'dark';
+  };
 }
 
 export interface AuthCredentials {
@@ -74,6 +82,20 @@ export interface FamilyInvite {
   status: 'pending' | 'accepted' | 'declined';
 }
 
+export interface FamilyRoom {
+  id: number;
+  familyId: number;
+  name: string;
+  roomTemplateId?: number | null;
+  roomTemplate?: {
+    id: number;
+    name: string;
+    description?: string | null;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // Task Types
 export interface Task {
   taskId: number;
@@ -82,7 +104,9 @@ export interface Task {
   description?: string;
   dueDate?: string;
   assignedToUserId?: string;
+  assignedToName?: string;
   createdByUserId: string;
+  createdByName?: string;
   status: TaskStatus;
   rewardType?: RewardType;
   rewardValue?: number;
@@ -93,6 +117,8 @@ export interface Task {
   updatedAt: string;
   isCustom?: boolean;
   approvalStatus?: 'pending' | 'approved' | 'rejected';
+  priority?: TaskPriority;
+  tags?: string[];
 }
 
 export interface TaskUpdatePayload {
@@ -102,57 +128,82 @@ export interface TaskUpdatePayload {
   dueDate?: string;
   rewardType?: RewardType;
   rewardValue?: number;
+  category?: TaskCategory;
+  recurring?: RecurrenceType;
+  priority?: TaskPriority;
 }
 
 // Calendar Types
 export interface CalendarEvent {
   eventId: number;
+  familyId: number;
   title: string;
-  startTime: string;
-  endTime?: string;
   description?: string;
   location?: string;
-  familyId: number;
+  startTime: string;
+  endTime?: string;
   createdByUserId: string;
+  createdByName?: string;
   assignedToUserId?: string;
-  repeatType?: RecurrenceType;
-  recurrencePattern?: string;
+  assignedToName?: string;
+  color?: string;
   isPrivate?: boolean;
   reminder?: boolean;
-  color?: string;
+  repeatType?: RecurrenceType;
+  recurrenceRule?: string | null;
+  recurrenceExceptionDates?: string[];
+  recurrenceParentId?: number | null;
+  recurrenceOriginalStart?: string | null;
+  recurrenceOriginalEnd?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 // Budget Types
+export type BudgetCategoryKey =
+  | 'housing'
+  | 'utilities'
+  | 'groceries'
+  | 'transportation'
+  | 'healthcare'
+  | 'education'
+  | 'entertainment'
+  | 'savings'
+  | 'other';
+
 export interface Budget {
-  budgetId: number;
-  familyId: number;
+  id: string;
+  familyId: string;
   name: string;
   amount: number;
-  spentAmount: number;
+  spent: number;
   period: BudgetPeriod;
-  startDate: string;
+  category?: BudgetCategoryKey;
+  startDate?: string;
   endDate?: string;
-  categories: BudgetCategory[];
-  createdAt: string;
+  categories?: BudgetCategory[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface BudgetCategory {
-  categoryId: number;
+  categoryId: number | string;
   name: string;
   limit: number;
   spent: number;
 }
 
 export interface Transaction {
-  transactionId: number;
-  budgetId: number;
+  id: string;
+  familyId: string;
   amount: number;
-  category: string;
-  description: string;
+  category: BudgetCategoryKey | string;
+  description?: string;
   date: string;
-  createdBy: string;
+  createdBy?: string;
+  budgetId?: string;
+  recurring?: boolean;
+  recurringPeriod?: BudgetPeriod;
 }
 
 // Messaging Types
@@ -166,6 +217,19 @@ export interface Chat {
   createdAt: string;
   name?: string;
   avatar?: string;
+  unreadCount?: number;
+  isMuted?: boolean;
+  typingUserIds?: string[];
+}
+
+export interface MessageAttachment {
+  id: string;
+  type: 'image' | 'file';
+  url: string;
+  thumbnailUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
 }
 
 export interface Message {
@@ -175,14 +239,21 @@ export interface Message {
   senderName?: string;
   chatId: string;
   timestamp: string;
+  updatedAt?: string;
   status: MessageStatus;
   type: 'text' | 'image' | 'file';
+  attachments?: MessageAttachment[];
+  deliveredAt?: string;
+  readAt?: string;
   metadata?: {
     fileName?: string;
     fileSize?: number;
     fileType?: string;
     imageUrl?: string;
+    [key: string]: unknown;
   };
+  isLocal?: boolean;
+  localId?: string;
 }
 
 // Recipe Types
@@ -244,18 +315,27 @@ export interface ShoppingList {
   name: string;
   createdByUserId: string;
   createdAt: string;
+  updatedAt?: string;
+  archivedAt?: string | null;
   items: ShoppingItem[];
+  colorHex?: string;
 }
 
 export interface ShoppingItem {
   itemId: number;
   name: string;
-  quantity: number;
-  unit: string;
+  quantity: number | string;
+  unit?: string;
   category?: string;
+  notes?: string;
+  sortOrder?: number;
+  addedByUserId?: string;
+  addedAt?: string;
   completed: boolean;
   completedAt?: string;
   completedByUserId?: string;
+  updatedAt?: string;
+  shoppingListId?: number;
 }
 
 // Journal Types
@@ -335,6 +415,7 @@ export interface AppState {
   family: Family | null;
   theme: 'light' | 'dark';
   notifications: boolean;
+  emailNotifications: boolean;
   isInitialized: boolean;
 }
 
@@ -360,7 +441,8 @@ export type MainStackParamList = {
   TaskDetails: { taskId: number };
   RecipeDetails: { recipeId: number };
   MemberProfile: { userId: string };
-  EditProfile: undefined;
+  Profile: undefined;
+  Settings: undefined;
   ChatDetail: { chatId: string };
 };
 

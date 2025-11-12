@@ -34,7 +34,7 @@ export enum ContentRestriction {
 // TYPE DEFINITIONS
 // ============================================
 
-export interface AuthorizationStatus {
+export interface AuthorizationStatusRecord {
   childDeviceId: string;
   status: AuthorizationStatus;
   requestedAt: string;

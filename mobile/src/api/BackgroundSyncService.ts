@@ -76,7 +76,7 @@ export interface SyncConflict {
   resolution?: 'local' | 'remote' | 'merged';
 }
 
-export interface SyncStatus {
+export interface SyncStatusSummary {
   isOnline: boolean;
   isSyncing: boolean;
   lastSyncAt?: string;

@@ -1,16 +1,17 @@
 import React from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../../store/appStore';
 import { Text } from '../../components/ui/Text';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { spacing, lightTheme, darkTheme } from '../../theme';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { MainStackParamList } from '../../types';
 
-type Props = NativeStackScreenProps<MainStackParamList, 'RecipeDetails'>;
+type RecipeDetailsParams = { recipeId: number };
 
-const RecipeDetailsScreen: React.FC<Props> = ({ route, navigation }) => {
+const RecipeDetailsScreen: React.FC = () => {
+  const navigation = useNavigation();
+  const route = useRoute() as unknown as { params: RecipeDetailsParams };
   const { theme } = useAppStore();
   const isDark = theme === 'dark';
   const themeColors = isDark ? darkTheme : lightTheme;

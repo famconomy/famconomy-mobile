@@ -1,197 +1,390 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  StyleSheet,
+  View,
   Switch,
+  TouchableOpacity,
   Alert,
   Linking,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+
 import {
-  User,
+  User as UserIcon,
   Bell,
-  Lock,
+  Mail,
   Palette,
+  HelpCircle,
+  Shield,
+  FileText,
   Info,
   LogOut,
   ChevronRight,
-  Mail,
-  HelpCircle,
-  FileText,
-  Shield,
 } from 'lucide-react-native';
-import { useAuth } from '../../hooks/useAuth';
+import { useAppStore } from '../../store/appStore';
+import { useAuthStore } from '../../store/authStore';
 import { useFamily } from '../../hooks/useFamily';
+import { Text } from '../../components/ui/Text';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { spacing, lightTheme, darkTheme, borderRadius, fontSize } from '../../theme';
+import type { MainStackParamList } from '../../types';
+import { Toast } from '../../components/ui/Toast';
+import { updateUser } from '../../api/users';
 
-export const SettingsScreen = () => {
-  const { user, logout } = useAuth();
+const SettingsScreen: React.FC = () => {
+  const {
+    theme,
+    setTheme,
+    notifications,
+    setNotifications,
+    emailNotifications,
+    setEmailNotifications,
+  } = useAppStore();
+  const { user, logout, setUser } = useAuthStore();
   const { family } = useFamily();
+  const navigation = useNavigation<any>();
+  const [pendingPreference, setPendingPreference] = useState<null | 'push' | 'email' | 'theme'>(null);
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' } | null>(null);
 
-  // Preference states
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const isDark = theme === 'dark';
+  const themeColors = isDark ? darkTheme : lightTheme;
+
+  const contactEmail = 'support@famconomy.com';
+
+  const userDisplayName = useMemo(() => {
+    if (user?.fullName) return user.fullName;
+    const composed = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+    return composed || user?.email || 'FamConomy Member';
+  }, [user]);
+
+  useEffect(() => {
+    if (!user?.preferences) return;
+    const prefs = user.preferences;
+    if (
+      prefs.pushNotificationsEnabled !== undefined &&
+      prefs.pushNotificationsEnabled !== notifications
+    ) {
+      setNotifications(prefs.pushNotificationsEnabled);
+    }
+    if (
+      prefs.emailNotificationsEnabled !== undefined &&
+      prefs.emailNotificationsEnabled !== emailNotifications
+    ) {
+      setEmailNotifications(prefs.emailNotificationsEnabled);
+    }
+    if (
+      prefs.themePreference &&
+      prefs.themePreference !== theme
+    ) {
+      setTheme(prefs.themePreference);
+    }
+  }, [user?.preferences, notifications, emailNotifications, theme, setNotifications, setEmailNotifications, setTheme]);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: logout,
-        },
-      ]
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: logout,
+      },
+    ]);
+  };
+
+  const handleLink = (url: string) => {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Unavailable', 'Unable to open the requested link.');
+    });
+  };
+
+  const syncPreferences = async (
+    changes: { pushNotificationsEnabled?: boolean; emailNotificationsEnabled?: boolean; themePreference?: 'light' | 'dark' },
+    revert?: () => void,
+    source?: 'push' | 'email' | 'theme',
+  ) => {
+    if (!user) {
+      setToast({ message: 'Sign in to sync preferences.', type: 'info' });
+      return;
+    }
+    try {
+      setPendingPreference(source ?? null);
+      const payload = { preferences: changes };
+      const apiUser: any = await updateUser(user.id, payload);
+      const rawPreferences =
+        apiUser?.preferences ??
+        apiUser?.Preferences ??
+        apiUser?.settings ??
+        user.preferences ??
+        {};
+      const normalizedPreferences = {
+        pushNotificationsEnabled:
+          rawPreferences?.pushNotificationsEnabled ??
+          rawPreferences?.PushNotificationsEnabled ??
+          changes.pushNotificationsEnabled ??
+          user.preferences?.pushNotificationsEnabled,
+        emailNotificationsEnabled:
+          rawPreferences?.emailNotificationsEnabled ??
+          rawPreferences?.EmailNotificationsEnabled ??
+          changes.emailNotificationsEnabled ??
+          user.preferences?.emailNotificationsEnabled,
+        themePreference:
+          rawPreferences?.themePreference ??
+          rawPreferences?.ThemePreference ??
+          changes.themePreference ??
+          user.preferences?.themePreference,
+      };
+      setUser({
+        ...user,
+        preferences: normalizedPreferences,
+      } as any);
+    } catch (err) {
+      revert?.();
+      const message =
+        err instanceof Error ? err.message : 'Failed to update your preferences.';
+      setToast({ message, type: 'error' });
+    } finally {
+      setPendingPreference(null);
+    }
+  };
+
+  const handleTogglePush = (value: boolean) => {
+    const previous = notifications;
+    setNotifications(value);
+    void syncPreferences(
+      { pushNotificationsEnabled: value },
+      () => setNotifications(previous),
+      'push',
     );
   };
 
-  const handleSupport = () => {
-    Linking.openURL('mailto:support@famconomy.com?subject=Support Request');
+  const handleToggleEmail = (value: boolean) => {
+    const previous = emailNotifications;
+    setEmailNotifications(value);
+    void syncPreferences(
+      { emailNotificationsEnabled: value },
+      () => setEmailNotifications(previous),
+      'email',
+    );
   };
 
-  const handlePrivacyPolicy = () => {
-    Linking.openURL('https://famconomy.com/privacy');
-  };
-
-  const handleTerms = () => {
-    Linking.openURL('https://famconomy.com/terms');
+  const handleToggleTheme = (value: boolean) => {
+    const previous = theme;
+    const nextTheme = value ? 'dark' : 'light';
+    setTheme(nextTheme);
+    void syncPreferences(
+      { themePreference: nextTheme },
+      () => setTheme(previous),
+      'theme',
+    );
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* User Info */}
-      <View style={styles.userSection}>
-        <View style={styles.avatar}>
-          <User size={32} color="#fff" />
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>
-            {user?.firstName} {user?.lastName}
-          </Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-          {family && (
-            <Text style={styles.userFamily}>👪 {family.name}</Text>
-          )}
-        </View>
-      </View>
+    <ScrollView
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {toast && <Toast message={toast.message} type={toast.type} onHide={() => setToast(null)} />}
 
-      {/* Account Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
-        
-        <TouchableOpacity
-          style={styles.settingItem}
-          onPress={() => Alert.alert('Profile', 'Profile editing coming soon!')}
-        >
-          <User size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Edit Profile</Text>
-          <ChevronRight size={20} color="#94a3b8" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingItem}
-          onPress={() => Alert.alert('Privacy', 'Privacy settings coming soon!')}
-        >
-          <Lock size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Privacy & Security</Text>
-          <ChevronRight size={20} color="#94a3b8" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        
-        <View style={styles.settingItem}>
-          <Bell size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Push Notifications</Text>
-          <Switch
-            value={pushNotifications}
-            onValueChange={setPushNotifications}
-            trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-            thumbColor={pushNotifications ? '#3b82f6' : '#f4f4f5'}
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <Mail size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Email Notifications</Text>
-          <Switch
-            value={emailNotifications}
-            onValueChange={setEmailNotifications}
-            trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-            thumbColor={emailNotifications ? '#3b82f6' : '#f4f4f5'}
-          />
-        </View>
-      </View>
-
-      {/* Appearance Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Appearance</Text>
-        
-        <View style={styles.settingItem}>
-          <Palette size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Dark Mode</Text>
-          <Switch
-            value={darkMode}
-            onValueChange={setDarkMode}
-            trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-            thumbColor={darkMode ? '#3b82f6' : '#f4f4f5'}
-          />
-        </View>
-      </View>
-
-      {/* Support Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Support</Text>
-        
-        <TouchableOpacity style={styles.settingItem} onPress={handleSupport}>
-          <HelpCircle size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Help & Support</Text>
-          <ChevronRight size={20} color="#94a3b8" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.settingItem} onPress={handlePrivacyPolicy}>
-          <Shield size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Privacy Policy</Text>
-          <ChevronRight size={20} color="#94a3b8" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.settingItem} onPress={handleTerms}>
-          <FileText size={22} color="#64748b" />
-          <Text style={styles.settingLabel}>Terms of Service</Text>
-          <ChevronRight size={20} color="#94a3b8" />
-        </TouchableOpacity>
-      </View>
-
-      {/* App Info Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-        
-        <View style={styles.settingItem}>
-          <Info size={22} color="#64748b" />
-          <View style={styles.infoContent}>
-            <Text style={styles.settingLabel}>Version</Text>
-            <Text style={styles.versionText}>1.0.0</Text>
+      <Card isDark={isDark} elevated style={styles.userCard}>
+        <View style={styles.userRow}>
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: themeColors.primary,
+              },
+            ]}
+          >
+            <UserIcon size={28} color="#fff" />
+          </View>
+          <View style={{ flex: 1, marginLeft: spacing[3] }}>
+            <Text variant="h3" isDark={isDark} weight="bold">
+              {userDisplayName}
+            </Text>
+            <Text variant="body" color="textSecondary" isDark={isDark}>
+              {user?.email ?? 'No email provided'}
+            </Text>
+            {family && (
+              <Text variant="caption" color="textSecondary" isDark={isDark} style={{ marginTop: spacing[1] }}>
+                👪 {family.name}
+              </Text>
+            )}
           </View>
         </View>
-      </View>
+        <Button
+          title="View profile"
+          onPress={() => navigation.navigate('Profile')}
+          size="small"
+          style={{ marginTop: spacing[3] }}
+          isDark={isDark}
+        />
+      </Card>
 
-      {/* Logout Section */}
-      <View style={styles.section}>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LogOut size={24} color="#ef4444" />
-          <Text style={styles.logoutText}>Logout</Text>
+      <Card isDark={isDark} style={styles.sectionCard}>
+        <Text variant="h3" isDark={isDark} weight="bold" style={styles.sectionTitle}>
+          Account
+        </Text>
+        <TouchableOpacity
+          style={styles.rowItem}
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowLeft}>
+            <UserIcon size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Profile
+            </Text>
+          </View>
+          <ChevronRight size={18} color={themeColors.textSecondary} />
         </TouchableOpacity>
-      </View>
+        <TouchableOpacity
+          style={styles.rowItem}
+          onPress={() => Alert.alert('Coming soon', 'Privacy settings will be available soon.')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowLeft}>
+            <Shield size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Privacy & Security
+            </Text>
+          </View>
+          <ChevronRight size={18} color={themeColors.textSecondary} />
+        </TouchableOpacity>
+      </Card>
+
+      <Card isDark={isDark} style={styles.sectionCard}>
+        <Text variant="h3" isDark={isDark} weight="bold" style={styles.sectionTitle}>
+          Notifications
+        </Text>
+        <View style={styles.rowItem}>
+          <View style={styles.rowLeft}>
+            <Bell size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Push Notifications
+            </Text>
+          </View>
+          <Switch
+            value={notifications}
+            onValueChange={handleTogglePush}
+            trackColor={{ false: themeColors.surfaceVariant, true: themeColors.primaryLight }}
+            thumbColor={notifications ? themeColors.primary : '#f4f4f5'}
+            disabled={pendingPreference === 'push'}
+          />
+        </View>
+        <View style={styles.rowItem}>
+          <View style={styles.rowLeft}>
+            <Mail size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Email Notifications
+            </Text>
+          </View>
+          <Switch
+            value={emailNotifications}
+            onValueChange={handleToggleEmail}
+            trackColor={{ false: themeColors.surfaceVariant, true: themeColors.primaryLight }}
+            thumbColor={emailNotifications ? themeColors.primary : '#f4f4f5'}
+            disabled={pendingPreference === 'email'}
+          />
+        </View>
+      </Card>
+
+      <Card isDark={isDark} style={styles.sectionCard}>
+        <Text variant="h3" isDark={isDark} weight="bold" style={styles.sectionTitle}>
+          Appearance
+        </Text>
+        <View style={styles.rowItem}>
+          <View style={styles.rowLeft}>
+            <Palette size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Dark Mode
+            </Text>
+          </View>
+          <Switch
+            value={isDark}
+            onValueChange={handleToggleTheme}
+            trackColor={{ false: themeColors.surfaceVariant, true: themeColors.primaryLight }}
+            thumbColor={isDark ? themeColors.primary : '#f4f4f5'}
+            disabled={pendingPreference === 'theme'}
+          />
+        </View>
+      </Card>
+
+      <Card isDark={isDark} style={styles.sectionCard}>
+        <Text variant="h3" isDark={isDark} weight="bold" style={styles.sectionTitle}>
+          Support
+        </Text>
+        <TouchableOpacity
+          style={styles.rowItem}
+          onPress={() => Linking.openURL(`mailto:${contactEmail}`)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowLeft}>
+            <HelpCircle size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Help & Support
+            </Text>
+          </View>
+          <ChevronRight size={18} color={themeColors.textSecondary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.rowItem}
+          onPress={() => handleLink('https://famconomy.com/privacy')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowLeft}>
+            <Shield size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Privacy Policy
+            </Text>
+          </View>
+          <ChevronRight size={18} color={themeColors.textSecondary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.rowItem}
+          onPress={() => handleLink('https://famconomy.com/terms')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowLeft}>
+            <FileText size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Terms of Service
+            </Text>
+          </View>
+          <ChevronRight size={18} color={themeColors.textSecondary} />
+        </TouchableOpacity>
+      </Card>
+
+      <Card isDark={isDark} style={styles.sectionCard}>
+        <Text variant="h3" isDark={isDark} weight="bold" style={styles.sectionTitle}>
+          About
+        </Text>
+        <View style={styles.rowItem}>
+          <View style={styles.rowLeft}>
+            <Info size={20} color={themeColors.primary} />
+            <Text variant="body" isDark={isDark} style={styles.rowLabel}>
+              Version
+            </Text>
+          </View>
+          <Text variant="body" color="textSecondary" isDark={isDark}>
+            1.0.0
+          </Text>
+        </View>
+      </Card>
+
+      <Card isDark={isDark} style={styles.sectionCard}>
+        <TouchableOpacity style={styles.logoutRow} onPress={handleLogout}>
+          <LogOut size={22} color={themeColors.error} />
+          <Text style={[styles.logoutText, { color: themeColors.error }]}>
+            Logout
+          </Text>
+        </TouchableOpacity>
+      </Card>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Made with ❤️ by FamConomy
+        <Text variant="caption" color="textSecondary" isDark={isDark}>
+          Need help? Email us at {contactEmail}
         </Text>
       </View>
     </ScrollView>
@@ -201,102 +394,55 @@ export const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    padding: spacing[4],
   },
-  userSection: {
+  userCard: {
+    marginBottom: spacing[4],
+  },
+  userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
   },
   avatar: {
     width: 64,
     height: 64,
-    borderRadius: 32,
-    backgroundColor: '#3b82f6',
-    justifyContent: 'center',
+    borderRadius: borderRadius.full,
     alignItems: 'center',
-    marginRight: 16,
+    justifyContent: 'center',
   },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  userFamily: {
-    fontSize: 13,
-    color: '#94a3b8',
-  },
-  section: {
-    backgroundColor: '#fff',
-    marginVertical: 8,
-    paddingVertical: 8,
+  sectionCard: {
+    marginBottom: spacing[4],
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#94a3b8',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    marginBottom: spacing[3],
   },
-  settingItem: {
+  rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  settingLabel: {
-    fontSize: 16,
-    color: '#1e293b',
-    flex: 1,
-  },
-  infoContent: {
-    flex: 1,
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingVertical: spacing[2],
   },
-  versionText: {
-    fontSize: 14,
-    color: '#94a3b8',
-  },
-  logoutButton: {
+  rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 12,
+    gap: spacing[2],
+  },
+  rowLabel: {
+    fontSize: fontSize.base,
+  },
+  logoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[1],
   },
   logoutText: {
-    fontSize: 16,
-    color: '#ef4444',
+    fontSize: fontSize.lg,
     fontWeight: '600',
   },
   footer: {
     alignItems: 'center',
-    padding: 24,
-    marginTop: 16,
-  },
-  footerText: {
-    fontSize: 13,
-    color: '#94a3b8',
+    marginBottom: spacing[8],
   },
 });
 

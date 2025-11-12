@@ -1396,7 +1396,7 @@ model AuthorizationToken {
   targetUser              Users                 @relation("AuthTokenTargetUser", fields: [targetUserId], references: [UserID], onDelete: Cascade)
   family                  Family                @relation(fields: [familyId], references: [FamilyID], onDelete: Cascade)
   
-  token                   String                @db.Text @unique
+  token                   String                @db.VarChar(255) @unique
   grantedScopes           String                @db.Text  // Comma-separated scopes
   expiresAt               DateTime
   

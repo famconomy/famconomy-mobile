@@ -31,6 +31,14 @@
 				<string>328667852218-ofk3l0s1vu2n8k6sgdggl3dvcvlvk02e.apps.googleusercontent.com</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>famconomy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>famconomy</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>

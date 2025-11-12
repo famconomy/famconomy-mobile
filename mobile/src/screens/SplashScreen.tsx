@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useAppStore } from '../../store/appStore';
-import { useAuthStore } from '../../store/authStore';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { lightTheme, darkTheme } from '../../theme';
+import { useAppStore } from '../store/appStore';
+import { useAuthStore } from '../store/authStore';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { lightTheme, darkTheme } from '../theme';
 
 const SplashScreen: React.FC = () => {
   const { theme, setInitialized } = useAppStore();

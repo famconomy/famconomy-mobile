@@ -1,4 +1,5 @@
 import { prisma } from '../db';
+import { WalletLedgerType, Prisma } from '@prisma/client';
 import type { AuthorizationScope, FamilyControlsAccount } from '@famconomy/shared';
 import crypto from 'crypto';
 
@@ -327,11 +328,11 @@ export const getOrCreateFamilyControlsAccount = async (params: {
       id: account.id,
       userId: account.userId,
       familyId: account.familyId,
-      authorizationToken: account.authorizationToken || undefined,
-      tokenExpiresAt: account.tokenExpiresAt?.getTime(),
-      screenTimeLimitMinutes: account.screenTimeLimitMinutes || undefined,
-      dailyScreenTimeMinutes: account.dailyScreenTimeMinutes || undefined,
-      lastSyncAt: account.lastSyncAt?.getTime(),
+  authorizationToken: account.authorizationToken || '',
+  tokenExpiresAt: account.tokenExpiresAt?.getTime() ?? 0,
+  screenTimeLimitMinutes: account.screenTimeLimitMinutes ?? 0,
+  dailyScreenTimeMinutes: account.dailyScreenTimeMinutes ?? 0,
+  lastSyncAt: account.lastSyncAt?.getTime() ?? 0,
       isActive: account.isActive,
       metadata: account.metadata as any,
       createdAt: account.createdAt.toISOString(),
@@ -362,8 +363,8 @@ export const updateScreenTimeAccount = async (params: {
         },
       },
       data: {
-        dailyScreenTimeMinutes: params.dailyScreenTimeMinutes,
-        screenTimeLimitMinutes: params.screenTimeLimitMinutes,
+        dailyScreenTimeMinutes: params.dailyScreenTimeMinutes ?? null,
+        screenTimeLimitMinutes: params.screenTimeLimitMinutes ?? null,
         lastSyncAt: new Date(),
         ...(params.metadata && { metadata: params.metadata }),
       },
@@ -422,10 +423,10 @@ export const recordScreenTime = async (params: {
       },
       update: {
         totalMinutesUsed: params.totalMinutesUsed,
-        dailyLimitMinutes: params.dailyLimitMinutes,
-        categoryBreakdown: params.categoryBreakdown,
-        appBreakdown: params.appBreakdown,
-        warnings: params.warnings,
+        dailyLimitMinutes: params.dailyLimitMinutes ?? null,
+        categoryBreakdown: params.categoryBreakdown ?? Prisma.JsonNull,
+        appBreakdown: params.appBreakdown ?? Prisma.JsonNull,
+        warnings: params.warnings ?? Prisma.JsonNull,
         lastUpdatedAt: new Date(),
       },
       create: {
@@ -434,10 +435,10 @@ export const recordScreenTime = async (params: {
         familyId: params.familyId,
         date,
         totalMinutesUsed: params.totalMinutesUsed,
-        dailyLimitMinutes: params.dailyLimitMinutes,
-        categoryBreakdown: params.categoryBreakdown,
-        appBreakdown: params.appBreakdown,
-        warnings: params.warnings,
+        dailyLimitMinutes: params.dailyLimitMinutes ?? null,
+        categoryBreakdown: params.categoryBreakdown ?? Prisma.JsonNull,
+        appBreakdown: params.appBreakdown ?? Prisma.JsonNull,
+        warnings: params.warnings ?? Prisma.JsonNull,
         lastUpdatedAt: new Date(),
       },
     });
@@ -585,19 +586,16 @@ export const recordScreenTimeEventToLedger = async (params: {
 
     // Map screen time to ledger value (configurable conversion)
     // Example: 1 hour = 1 point/dollar
-    const ledgerValue = Math.round(screenTimeMinutes / 60 * 100) / 100;
-
-    // Create ledger entry via direct database call
-    // This will be linked to Family Controls event
-    const ledgerEntry = await prisma.ledger.create({
+    // For now, 1 minute = 1 cent
+    const ledgerValueCents = BigInt(screenTimeMinutes); // 1 minute = 1 cent
+    const ledgerEntry = await prisma.walletLedger.create({
       data: {
-        userId,
+        initiatedByUserId: userId,
         familyId,
-        amount: ledgerValue,
-        type: 'SCREEN_TIME',
-        description: `Screen time: ${screenTimeMinutes}m in ${category}${
-          appName ? ` (${appName})` : ''
-        }`,
+        amountCents: ledgerValueCents,
+        currency: 'USD',
+        type: WalletLedgerType.ADJUSTMENT, // Use a valid enum value, adjust if SCREEN_TIME is not present
+        description: `Screen time: ${screenTimeMinutes}m in ${category}${appName ? ` (${appName})` : ''}`,
         metadata: {
           screenTimeMinutes,
           category,
@@ -616,7 +614,7 @@ export const recordScreenTimeEventToLedger = async (params: {
           familyId,
           userId,
           eventType: 'SCREEN_TIME_RECORDED',
-          data: {
+          eventData: {
             screenTimeMinutes,
             category,
             appName,
@@ -657,7 +655,7 @@ export const recordDeviceActionToLedger = async (params: {
         familyId,
         userId,
         eventType: actionType,
-        data: {
+        eventData: {
           actionDetails,
           appName,
           recordedAt: timestamp.toISOString(),
@@ -704,7 +702,7 @@ export const recordApprovalToLedger = async (params: {
         familyId,
         userId: parentId,
         eventType: approvalType,
-        data: {
+        eventData: {
           childId,
           approvalDetails,
           duration,
@@ -737,11 +735,11 @@ export const getLedgerEntriesForFamilyControls = async (params: {
   try {
     const { familyId, userId, startDate, endDate, limit = 100 } = params;
 
-    const entries = await prisma.ledger.findMany({
+  const entries = await prisma.walletLedger.findMany({
       where: {
         familyId,
-        type: 'SCREEN_TIME',
-        ...(userId && { userId }),
+        type: WalletLedgerType.ADJUSTMENT, // Use a valid enum value, adjust if SCREEN_TIME is not present
+        ...(userId && { initiatedByUserId: userId }),
         ...(startDate || endDate) && {
           createdAt: {
             ...(startDate && { gte: startDate }),
@@ -782,7 +780,7 @@ export const syncFamilyControlsEventsToLedger = async (familyId: number) => {
 
     for (const event of unlinkedEvents) {
       try {
-        const eventData = event.data as any;
+        const eventData = event.eventData as any;
         
         // Check if already has ledger entry
         if (eventData.ledgerEntryId) {
