@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "328667852218",
+    "project_id": "famconomy1",
+    "storage_bucket": "famconomy1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:328667852218:android:2e65d369a42aec88964183",
+        "android_client_info": {
+          "package_name": "com.FamConomy.FamConomy"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "328667852218-ofk3l0s1vu2n8k6sgdggl3dvcvlvk02e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMnjc2ZsQYFb_fomEirhzhTsx8Ga_G75s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "328667852218-ofk3l0s1vu2n8k6sgdggl3dvcvlvk02e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

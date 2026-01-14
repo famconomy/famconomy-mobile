@@ -1,16 +1,10 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compileOnSave": false,
+  "extends": "../tsconfig.base.json",
   "files": [],
+  "include": [],
   "references": [
     {
-      "path": "./mobile"
-    },
-    {
-      "path": "./packages/shared"
-    },
-    {
-      "path": "./apps/api"
+      "path": "./tsconfig.app.json"
     }
   ]
 }
