@@ -19,6 +19,14 @@ html/
 *:[Zz]one.Identifier
 *.p8
 
+# Firebase config files (contain API keys)
+google-services.json
+GoogleService-Info.plist
+
+# Android keystore
+*.keystore
+*.jks
+
 
 
 .nx/cache
