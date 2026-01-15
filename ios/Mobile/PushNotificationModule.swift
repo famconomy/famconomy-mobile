@@ -3,7 +3,7 @@ import UserNotifications
 import UIKit
 
 @objc(PushNotificationModule)
-final class PushNotificationModule: RCTEventEmitter {
+final class PushNotificationModule: RCTEventEmitter, PushNotificationHandler {
   static weak var shared: PushNotificationModule?
 
   private let tokenKey = "famconomy_apns_device_token"
@@ -15,6 +15,7 @@ final class PushNotificationModule: RCTEventEmitter {
   override init() {
     super.init()
     PushNotificationModule.shared = self
+    pushNotificationHandler = self
   }
 
   @objc

@@ -129,4 +129,4 @@ vitest.config.*.timestamp*
 **/link-assets-manifest.json
 
 # Compiled output directories
-**/dist/
+**/dist/*.keystore

@@ -27,9 +27,8 @@ import type {
 } from '@famconomy/shared';
 
 // Use production URL or dev URL based on __DEV__
-const PWA_URL = __DEV__ 
-  ? 'http://localhost:5173' 
-  : 'https://app.famconomy.com';
+// For now, always use production until local web dev is set up
+const PWA_URL = 'https://app.famconomy.com';
 
 interface WebViewContainerProps {
   onAuthChange?: (isAuthenticated: boolean) => void;
@@ -159,9 +158,24 @@ export const WebViewContainer = forwardRef<WebViewContainerRef, WebViewContainer
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
       if (url.startsWith('famconomy://')) {
-        const path = url.replace('famconomy://', '/');
+        // Handle OAuth callback with hash fragments (tokens) and query params
+        // famconomy://auth/callback#access_token=...&refresh_token=...
+        // famconomy://auth/callback?code=...
+        const urlWithoutScheme = url.replace('famconomy://', '');
+        
+        // Split by hash first, then by query
+        const [beforeHash, hashPart] = urlWithoutScheme.split('#');
+        const [pathPart, queryPart] = beforeHash.split('?');
+        
+        const path = '/' + pathPart;
+        const query = queryPart ? '?' + queryPart : '';
+        const hash = hashPart ? '#' + hashPart : '';
+        
+        const fullUrl = `${PWA_URL}${path}${query}${hash}`;
+        console.log('[WebView] Deep link navigation:', fullUrl);
+        
         webViewRef.current?.injectJavaScript(`
-          window.location.href = '${PWA_URL}${path}';
+          window.location.href = '${fullUrl}';
           true;
         `);
       }
@@ -188,6 +202,38 @@ export const WebViewContainer = forwardRef<WebViewContainerRef, WebViewContainer
     
     // Allow loading the PWA and its resources
     if (url.startsWith(PWA_URL) || url.startsWith('about:')) {
+      return true;
+    }
+
+    // Allow Stripe, Supabase, and other required third-party domains to load in WebView
+    const allowedDomains = [
+      'js.stripe.com',
+      'api.stripe.com',
+      'm.stripe.network',
+      'supabase.co',
+      'famconomy.com',
+      'app.famconomy.com',
+    ];
+    
+    // Google OAuth opens in system browser for passkey/2FA support
+    // The OAuth callback will redirect back to famconomy:// deep link
+    if (url.includes('accounts.google.com') || 
+        url.includes('googleapis.com/identitytoolkit') ||
+        url.includes('supabase.co/auth/v1/authorize')) {
+      // Modify the redirect_to parameter to use our app scheme
+      let authUrl = url;
+      if (url.includes('redirect_to=')) {
+        // Already has redirect, let it proceed
+      } else if (url.includes('?')) {
+        authUrl = `${url}&redirect_to=famconomy://auth/callback`;
+      } else {
+        authUrl = `${url}?redirect_to=famconomy://auth/callback`;
+      }
+      Linking.openURL(authUrl);
+      return false;
+    }
+    
+    if (allowedDomains.some(domain => url.includes(domain))) {
       return true;
     }
 

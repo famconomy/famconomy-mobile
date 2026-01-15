@@ -126,6 +126,11 @@ target 'Mobile' do
       end
     end
 
+    # Disable User Script Sandboxing for the main app target (Xcode 16+ fix)
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+    end
+
 
     pods_root = File.join(Pod::Config.instance.installation_root, 'Pods')
 

@@ -1,6 +1,17 @@
 import UIKit
 import React
 import UserNotifications
+
+/// Protocol to decouple AppDelegate from PushNotificationModule at compile time
+@objc protocol PushNotificationHandler {
+  func updateDeviceToken(_ token: String)
+  func handleNotificationReceived(title: String?, body: String?, userInfo: [AnyHashable: Any])
+  func handleNotificationOpened(title: String?, body: String?, userInfo: [AnyHashable: Any])
+}
+
+/// Global reference set by PushNotificationModule on init
+var pushNotificationHandler: PushNotificationHandler?
+
 @main
 class AppDelegate: RCTAppDelegate, UNUserNotificationCenterDelegate {
   override init() {
@@ -19,7 +30,7 @@ class AppDelegate: RCTAppDelegate, UNUserNotificationCenterDelegate {
 
   override func sourceURL(for bridge: RCTBridge!) -> URL! {
 #if DEBUG
-    return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "src/main")
+    return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
 #else
     return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
@@ -30,7 +41,7 @@ class AppDelegate: RCTAppDelegate, UNUserNotificationCenterDelegate {
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
     let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-    PushNotificationModule.shared?.updateDeviceToken(token)
+    pushNotificationHandler?.updateDeviceToken(token)
   }
 
   override func application(
@@ -46,12 +57,16 @@ class AppDelegate: RCTAppDelegate, UNUserNotificationCenterDelegate {
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
     let content = notification.request.content
-    PushNotificationModule.shared?.handleNotificationReceived(
+    pushNotificationHandler?.handleNotificationReceived(
       title: content.title,
       body: content.body,
       userInfo: content.userInfo
     )
-    completionHandler([.banner, .sound, .badge])
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
   }
 
   func userNotificationCenter(
@@ -60,7 +75,7 @@ class AppDelegate: RCTAppDelegate, UNUserNotificationCenterDelegate {
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let content = response.notification.request.content
-    PushNotificationModule.shared?.handleNotificationOpened(
+    pushNotificationHandler?.handleNotificationOpened(
       title: content.title,
       body: content.body,
       userInfo: content.userInfo

@@ -1,4 +1,5 @@
 import Foundation
+import React
 import FamilyControls
 
 @available(iOS 16.0, *)
@@ -96,10 +97,11 @@ final class FamilyControlsModule: RCTEventEmitter {
     do {
       let childUserId = options["childUserId"] as? String ?? ""
       let revokedGrant = try screenTimeManager.revokeScreenTime(childUserId: childUserId)
-      resolve([
-        "success": true,
-        "revokedGrant": revokedGrant != nil ? screenTimeManager.grantDictionary(revokedGrant!) : NSNull()
-      ])
+      var result: [String: Any] = ["success": true]
+      if let grant = revokedGrant {
+        result["revokedGrant"] = screenTimeManager.grantDictionary(grant)
+      }
+      resolve(result)
     } catch {
       reject("REVOKE_FAILED", error.localizedDescription, error)
     }

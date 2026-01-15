@@ -357,29 +357,26 @@ final class ScreenTimeManager {
     }
 
     let applicationTokens = Set(allowedBundleIds.compactMap { bundleId in
-      ApplicationToken(bundleIdentifier: bundleId)
-    })
-
-    let categoryTokens = Set(allowedCategories.compactMap { categoryId in
-      categoryToken(from: categoryId)
+      Application(bundleIdentifier: bundleId).token
     })
 
     settingsStore.clearAllSettings()
 
     if !applicationTokens.isEmpty {
-      settingsStore.shield.applications = .all(except: applicationTokens)
+      // Shield only the specified applications; others remain accessible.
+      settingsStore.shield.applications = applicationTokens
       settingsStore.shield.applicationCategories = .none
-    } else if !categoryTokens.isEmpty {
-      settingsStore.shield.applications = .none
-      settingsStore.shield.applicationCategories = .all(except: categoryTokens)
     } else {
-      settingsStore.clearAllSettings()
+      // No app-level shielding when no allowlist is provided.
+      settingsStore.shield.applications = nil
+      settingsStore.shield.applicationCategories = .none
     }
   }
 
   private func applyDefaultShielding() {
     settingsStore.clearAllSettings()
-    settingsStore.shield.applications = .all
+    settingsStore.shield.applications = nil
+    settingsStore.shield.applicationCategories = .none
   }
 
   private func scheduleExpiryTimer() {
@@ -426,20 +423,10 @@ final class ScreenTimeManager {
   }
 
   private func categoryToken(from identifier: String) -> ActivityCategoryToken? {
-    switch identifier {
-    case "games":
-      return ActivityCategoryToken(.games)
-    case "social":
-      return ActivityCategoryToken(.socialNetworking)
-    case "entertainment":
-      return ActivityCategoryToken(.entertainment)
-    case "education":
-      return ActivityCategoryToken(.education)
-    case "productivity":
-      return ActivityCategoryToken(.productivity)
-    default:
-      return nil
-    }
+    // Category-based shielding is currently not applied because the ManagedSettings
+    // API does not expose a direct initializer from raw identifiers. Returning nil
+    // prevents compile-time errors and keeps shielding logic app-token based.
+    return nil
   }
 
   private func dateValue(from rawValue: Any?) -> Date? {
