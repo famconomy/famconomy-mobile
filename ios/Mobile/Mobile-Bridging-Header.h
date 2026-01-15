@@ -5,5 +5,6 @@
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
+#import <React/RCTLinkingManager.h>
 
 #endif /* MOBILE_BRIDGING_HEADER_H */

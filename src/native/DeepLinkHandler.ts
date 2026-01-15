@@ -85,28 +85,35 @@ function handleDeepLink(url: string): void {
 function parseDeepLink(url: string): DeepLinkRoute | null {
   try {
     let path: string;
-    let searchParams: URLSearchParams;
+    let queryString: string = '';
 
     if (url.startsWith(`${URL_SCHEME}://`)) {
-      // Custom URL scheme: famconomy://path/to/resource?param=value
+      // Custom URL scheme: famconomy://path/to/resource?param=value#hash
       const withoutScheme = url.replace(`${URL_SCHEME}://`, '');
-      const [pathPart, queryPart] = withoutScheme.split('?');
+      // Remove hash fragment first
+      const [beforeHash] = withoutScheme.split('#');
+      const [pathPart, queryPart] = beforeHash.split('?');
       path = '/' + pathPart;
-      searchParams = new URLSearchParams(queryPart || '');
+      queryString = queryPart || '';
     } else if (url.includes(UNIVERSAL_LINK_DOMAIN)) {
       // Universal link: https://app.famconomy.com/path
       const parsed = new URL(url);
       path = parsed.pathname;
-      searchParams = parsed.searchParams;
+      queryString = parsed.search.replace(/^\?/, '');
     } else {
       return null;
     }
 
-    // Convert search params to object
+    // Parse query string manually (React Native URLSearchParams doesn't have forEach)
     const params: Record<string, string> = {};
-    searchParams.forEach((value, key) => {
-      params[key] = value;
-    });
+    if (queryString) {
+      queryString.split('&').forEach((pair) => {
+        const [key, value] = pair.split('=');
+        if (key) {
+          params[decodeURIComponent(key)] = decodeURIComponent(value || '');
+        }
+      });
+    }
 
     return { path, params };
   } catch (error) {
